@@ -56,12 +56,17 @@ data class TaskItem(
     val description: String = "",
     val logoUrl: String = "",
     val link: String = "",
-    val reward: Long = 0L,
     val steps: List<String> = emptyList(),
-    val deadline: Long = 0L,
+    val reward: Long = 0L,
     val perUserLimit: Int = 1,
+    val totalLimit: Long = 0L,
+    val deadline: Long = 0L,
+    val proofType: String = "Screenshot",
+    val proofHint: String = "",
+    val terms: String = "",
     val status: String = "draft", // draft | published | archived
-    val proofType: String = "screenshot",
+    val completionsCount: Long = 0L,
+    val publishedAt: Long = 0L,
     val createdAt: Long = 0L,
     val updatedAt: Long = 0L
 )
@@ -311,12 +316,16 @@ data class AdminRedeemCodeItem(
 data class PayoutMethodItem(
     val id: String = "",
     val uid: String = "",
-    val type: String = "upi", // upi | bank
+    val ownerName: String = "",
+    val ownerEmail: String = "",
+    val type: String = "upi", // upi | bank | redeem
     val maskedAddress: String = "",
     val fullAddress: String = "",
     val bankName: String = "",
+    val ifsc: String = "",
     val accountHolder: String = "",
-    val active: Boolean = true,
+    val maskedAccountHolder: String = "",
+    val status: String = "Unknown", // active | disabled | pending | Unknown
     val disabledReason: String? = null,
     val createdAt: Long = 0L
 )

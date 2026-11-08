@@ -1,5 +1,7 @@
 package com.cashopinion.console.ui.screens.season
 
+import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -9,6 +11,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -25,6 +28,7 @@ fun SeasonScreen(
     modifier: Modifier = Modifier
 ) {
     val colors = CashTheme.colors
+    val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val season by consoleRepo.observeSeasonConfig().collectAsState(initial = SeasonConfig())
     val withdrawals by consoleRepo.observeWithdrawals().collectAsState(initial = emptyList())
@@ -50,6 +54,11 @@ fun SeasonScreen(
     var deleteConfirmText by remember { mutableStateOf("") }
     var isResetting by remember { mutableStateOf(false) }
     var resetError by remember { mutableStateOf<String?>(null) }
+
+    // Section 2.4: Block back during operation
+    BackHandler(enabled = isResetting) {
+        Toast.makeText(context, "Operation in progress. Please wait.", Toast.LENGTH_SHORT).show()
+    }
 
     Column(
         modifier = modifier

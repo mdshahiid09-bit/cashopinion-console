@@ -15,7 +15,7 @@
       }
     },
     "adminAudit": {
-      ".read": "auth != null && auth.uid === 'BV6iHH8GAeZEDmhnyAeY7JUEKRf1'",
+      ".read": "auth != null && (root.child('admins').child(auth.uid).val() === true || auth.uid === 'BV6iHH8GAeZEDmhnyAeY7JUEKRf1')",
       ".write": "auth != null && (root.child('admins').child(auth.uid).val() === true || auth.uid === 'BV6iHH8GAeZEDmhnyAeY7JUEKRf1')"
     },
     "tasks": {
@@ -71,6 +71,13 @@
         }
       }
     },
+    "paymentMethods": {
+      ".read": "auth != null && (root.child('admins').child(auth.uid).val() === true || auth.uid === 'BV6iHH8GAeZEDmhnyAeY7JUEKRf1')",
+      "$uid": {
+        ".read": "auth != null && (auth.uid === $uid || root.child('admins').child(auth.uid).val() === true || auth.uid === 'BV6iHH8GAeZEDmhnyAeY7JUEKRf1')",
+        ".write": "auth != null && (auth.uid === $uid || root.child('admins').child(auth.uid).val() === true || auth.uid === 'BV6iHH8GAeZEDmhnyAeY7JUEKRf1')"
+      }
+    },
     "users": {
       "$uid": {
         ".read": "auth != null && (auth.uid === $uid || root.child('admins').child(auth.uid).val() === true || auth.uid === 'BV6iHH8GAeZEDmhnyAeY7JUEKRf1')",
@@ -88,6 +95,44 @@
           }
         }
       }
+    },
+    "offers": {
+      ".read": "auth != null",
+      ".write": "auth != null && (root.child('admins').child(auth.uid).val() === true || auth.uid === 'BV6iHH8GAeZEDmhnyAeY7JUEKRf1')"
+    },
+    "offers_history": {
+      ".read": "auth != null && (root.child('admins').child(auth.uid).val() === true || auth.uid === 'BV6iHH8GAeZEDmhnyAeY7JUEKRf1')",
+      ".write": "auth != null"
+    },
+    "reports": {
+      ".read": "auth != null",
+      "$reportId": {
+        ".write": "auth != null && (root.child('admins').child(auth.uid).val() === true || auth.uid === 'BV6iHH8GAeZEDmhnyAeY7JUEKRf1' || auth.uid === newData.child('uid').val())"
+      }
+    },
+    "redeemCodes": {
+      ".read": "auth != null && (root.child('admins').child(auth.uid).val() === true || auth.uid === 'BV6iHH8GAeZEDmhnyAeY7JUEKRf1')",
+      ".write": "auth != null && (root.child('admins').child(auth.uid).val() === true || auth.uid === 'BV6iHH8GAeZEDmhnyAeY7JUEKRf1')"
+    },
+    "promoCodes": {
+      ".read": "auth != null",
+      ".write": "auth != null && (root.child('admins').child(auth.uid).val() === true || auth.uid === 'BV6iHH8GAeZEDmhnyAeY7JUEKRf1')"
+    },
+    "dailyBonus": {
+      "$uid": {
+        ".read": "auth != null && (auth.uid === $uid || root.child('admins').child(auth.uid).val() === true || auth.uid === 'BV6iHH8GAeZEDmhnyAeY7JUEKRf1')",
+        ".write": "auth != null && (auth.uid === $uid || root.child('admins').child(auth.uid).val() === true || auth.uid === 'BV6iHH8GAeZEDmhnyAeY7JUEKRf1')"
+      }
+    },
+    "scratchCards": {
+      "$uid": {
+        ".read": "auth != null && (auth.uid === $uid || root.child('admins').child(auth.uid).val() === true || auth.uid === 'BV6iHH8GAeZEDmhnyAeY7JUEKRf1')",
+        ".write": "auth != null && (auth.uid === $uid || root.child('admins').child(auth.uid).val() === true || auth.uid === 'BV6iHH8GAeZEDmhnyAeY7JUEKRf1')"
+      }
+    },
+    "leaderboard": {
+      ".read": "auth != null",
+      ".write": "auth != null && (root.child('admins').child(auth.uid).val() === true || auth.uid === 'BV6iHH8GAeZEDmhnyAeY7JUEKRf1')"
     },
     "config": {
       ".read": "auth != null",

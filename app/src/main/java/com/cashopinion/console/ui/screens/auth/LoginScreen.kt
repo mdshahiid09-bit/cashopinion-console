@@ -1,5 +1,7 @@
 package com.cashopinion.console.ui.screens.auth
 
+import android.app.Activity
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -11,6 +13,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -24,6 +28,8 @@ import androidx.compose.ui.unit.sp
 import com.cashopinion.console.R
 import com.cashopinion.console.data.repo.AuthRepo
 import com.cashopinion.console.ui.components.GoldPillButton
+import com.cashopinion.console.ui.components.SoundFx
+import com.cashopinion.console.ui.theme.CashColors
 import com.cashopinion.console.ui.theme.CashTheme
 import com.cashopinion.console.ui.theme.Shapes
 import kotlinx.coroutines.launch
@@ -35,6 +41,8 @@ fun LoginScreen(
     modifier: Modifier = Modifier
 ) {
     val colors = CashTheme.colors
+    val context = LocalContext.current
+    val activity = context as? Activity
     val focusManager = LocalFocusManager.current
     val scope = rememberCoroutineScope()
 
@@ -44,6 +52,55 @@ fun LoginScreen(
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var showForgotDialog by remember { mutableStateOf(false) }
+    var showExitDialog by remember { mutableStateOf(false) }
+
+    // Session Lock / Login Back Button -> Exit Dialog
+    BackHandler {
+        showExitDialog = true
+    }
+
+    if (showExitDialog) {
+        AlertDialog(
+            onDismissRequest = { showExitDialog = false },
+            title = {
+                Text(
+                    text = "Exit Cash Opinion Console?",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = colors.textPrimary
+                )
+            },
+            text = {
+                Text(
+                    text = "Your session will stay signed in. Real-time updates will stop until you open the app again.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.textSecondary
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        SoundFx.playClick()
+                        showExitDialog = false
+                        activity?.finish()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = CashColors.GoldPrimary)
+                ) {
+                    Text("Exit", color = Color(0xFF140E00), fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    SoundFx.playClick()
+                    showExitDialog = false
+                }) {
+                    Text("Stay", color = colors.textSecondary)
+                }
+            },
+            containerColor = colors.surface,
+            shape = Shapes.Dialog
+        )
+    }
 
     fun doLogin() {
         if (email.isBlank() || password.isBlank()) {

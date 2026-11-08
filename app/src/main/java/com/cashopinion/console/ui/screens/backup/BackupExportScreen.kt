@@ -1,5 +1,7 @@
 package com.cashopinion.console.ui.screens.backup
 
+import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -9,6 +11,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -28,12 +31,20 @@ fun BackupExportScreen(
     modifier: Modifier = Modifier
 ) {
     val colors = CashTheme.colors
+    val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
     var isBackingUp by remember { mutableStateOf(false) }
     var backupStatusText by remember { mutableStateOf<String?>(null) }
     var isExporting by remember { mutableStateOf(false) }
     var exportStatusText by remember { mutableStateOf<String?>(null) }
+
+    val isBusy = isBackingUp || isExporting
+
+    // Section 2.4: Block back while backup or export operation runs
+    BackHandler(enabled = isBusy) {
+        Toast.makeText(context, "Operation in progress. Please wait.", Toast.LENGTH_SHORT).show()
+    }
 
     // Approximate storage metrics for Spark 1GB limit
     val estimatedDbSizeMb = 34.5

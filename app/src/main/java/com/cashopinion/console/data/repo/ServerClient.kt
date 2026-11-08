@@ -130,4 +130,51 @@ class ServerClient(
     suspend fun createBackup(): Result<JSONObject> {
         return post("/v1/backup/create", JSONObject())
     }
+
+    private suspend fun put(path: String, jsonBody: JSONObject = JSONObject()): Result<JSONObject> = withContext(Dispatchers.IO) {
+        try {
+            val token = getAuthToken()
+            val baseUrl = sessionManager.serverUrl.trimEnd('/')
+            val requestId = UUID.randomUUID().toString()
+
+            val body = jsonBody.toString().toRequestBody(jsonMediaType)
+            val request = Request.Builder()
+                .url("$baseUrl$path")
+                .header("Authorization", "Bearer $token")
+                .header("x-request-id", requestId)
+                .put(body)
+                .build()
+
+            val response = client.newCall(request).execute()
+            val resStr = response.body?.string().orEmpty()
+            val resJson = if (resStr.isNotBlank()) JSONObject(resStr) else JSONObject()
+
+            if (response.isSuccessful && resJson.optBoolean("success", true)) {
+                Result.success(resJson)
+            } else {
+                val errorMsg = resJson.optString("error", "Server returned HTTP ${response.code}")
+                Result.failure(Exception(errorMsg))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun revealPayoutMethod(uid: String, methodId: String, reason: String): Result<JSONObject> {
+        val body = JSONObject().put("reason", reason)
+        return post("/v1/payout-methods/$uid/$methodId/reveal", body)
+    }
+
+    suspend fun disablePayoutMethod(uid: String, methodId: String, reason: String): Result<JSONObject> {
+        val body = JSONObject().put("reason", reason)
+        return post("/v1/payout-methods/$uid/$methodId/disable", body)
+    }
+
+    suspend fun createTask(taskJson: JSONObject): Result<JSONObject> {
+        return post("/v1/tasks", taskJson)
+    }
+
+    suspend fun updateTask(taskId: String, taskJson: JSONObject): Result<JSONObject> {
+        return put("/v1/tasks/$taskId", taskJson)
+    }
 }

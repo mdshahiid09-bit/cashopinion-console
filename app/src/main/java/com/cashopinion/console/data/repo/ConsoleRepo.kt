@@ -263,29 +263,73 @@ class ConsoleRepo(
                 val list = mutableListOf<TaskItem>()
                 for (child in snapshot.children) {
                     val id = child.key.orEmpty()
-                    val title = child.child("title").value?.toString().orEmpty()
+                    val title = child.child("title").value?.toString()
+                        ?: child.child("appName").value?.toString().orEmpty()
                     val desc = child.child("description").value?.toString().orEmpty()
+                    val logoUrl = child.child("logoUrl").value?.toString()
+                        ?: child.child("iconUrl").value?.toString().orEmpty()
+                    val link = child.child("link").value?.toString()
+                        ?: child.child("playStoreLink").value?.toString()
+                        ?: child.child("actionUrl").value?.toString().orEmpty()
                     val reward = child.child("reward").value?.toString()?.toLongOrNull()
+                        ?: child.child("rewardCoins").value?.toString()?.toLongOrNull()
+                        ?: child.child("prizeCoins").value?.toString()?.toLongOrNull()
                         ?: child.child("coins").value?.toString()?.toLongOrNull() ?: 0L
-                    val status = child.child("status").value?.toString() ?: "published"
-                    val link = child.child("link").value?.toString().orEmpty()
-                    val deadline = child.child("deadline").value?.toString()?.toLongOrNull() ?: 0L
+
+                    val stepsList = mutableListOf<String>()
+                    val stepsSnap = child.child("steps")
+                    if (stepsSnap.exists()) {
+                        for (s in stepsSnap.children) {
+                            val v = s.value?.toString().orEmpty()
+                            if (v.isNotBlank()) stepsList.add(v)
+                        }
+                    }
+                    if (stepsList.isEmpty()) {
+                        val inst = child.child("instructions").value?.toString()
+                            ?: child.child("userInstructions").value?.toString().orEmpty()
+                        if (inst.isNotBlank()) {
+                            stepsList.addAll(inst.lines().filter { it.isNotBlank() })
+                        }
+                    }
+
+                    val perUserLimit = child.child("perUserLimit").value?.toString()?.toIntOrNull() ?: 1
+                    val totalLimit = child.child("totalLimit").value?.toString()?.toLongOrNull()
+                        ?: child.child("slots").value?.toString()?.toLongOrNull() ?: 0L
+                    val deadline = child.child("deadline").value?.toString()?.toLongOrNull()
+                        ?: child.child("expiryAt").value?.toString()?.toLongOrNull() ?: 0L
+                    val proofType = child.child("proofType").value?.toString() ?: "Screenshot"
+                    val proofHint = child.child("proofHint").value?.toString().orEmpty()
+                    val terms = child.child("terms").value?.toString().orEmpty()
+                    val status = child.child("status").value?.toString() ?: "draft"
+                    val completionsCount = child.child("completionsCount").value?.toString()?.toLongOrNull() ?: 0L
+                    val publishedAt = child.child("publishedAt").value?.toString()?.toLongOrNull() ?: 0L
                     val createdAt = child.child("createdAt").value?.toString()?.toLongOrNull() ?: 0L
+                    val updatedAt = child.child("updatedAt").value?.toString()?.toLongOrNull() ?: 0L
 
                     list.add(
                         TaskItem(
                             taskId = id,
                             title = title,
                             description = desc,
-                            reward = reward,
-                            status = status,
+                            logoUrl = logoUrl,
                             link = link,
+                            steps = stepsList,
+                            reward = reward,
+                            perUserLimit = perUserLimit,
+                            totalLimit = totalLimit,
                             deadline = deadline,
-                            createdAt = createdAt
+                            proofType = proofType,
+                            proofHint = proofHint,
+                            terms = terms,
+                            status = status,
+                            completionsCount = completionsCount,
+                            publishedAt = publishedAt,
+                            createdAt = createdAt,
+                            updatedAt = updatedAt
                         )
                     )
                 }
-                list.sortByDescending { it.createdAt }
+                list.sortByDescending { if (it.updatedAt > 0) it.updatedAt else it.createdAt }
                 trySend(list)
             }
 
@@ -306,18 +350,49 @@ class ConsoleRepo(
             }
             val id = ref.key ?: return Result.failure(Exception("Failed to generate task ID"))
             val now = System.currentTimeMillis()
-            val payload = mapOf(
+            val payload = hashMapOf<String, Any>(
                 "taskId" to id,
-                "title" to task.title,
-                "description" to task.description,
-                "link" to task.link,
+                "title" to task.title.trim(),
+                "appName" to task.title.trim(),
+                "description" to task.description.trim(),
+                "logoUrl" to task.logoUrl,
+                "iconUrl" to task.logoUrl,
+                "link" to task.link.trim(),
+                "playStoreLink" to task.link.trim(),
+                "actionUrl" to task.link.trim(),
+                "steps" to task.steps,
                 "reward" to task.reward,
-                "status" to task.status,
+                "rewardCoins" to task.reward,
+                "perUserLimit" to task.perUserLimit,
+                "totalLimit" to task.totalLimit,
+                "slots" to (if (task.totalLimit > 0) task.totalLimit else -1L),
                 "deadline" to task.deadline,
-                "createdAt" to if (task.createdAt > 0) task.createdAt else now,
+                "expiryAt" to task.deadline,
+                "proofType" to task.proofType,
+                "proofHint" to task.proofHint.trim(),
+                "terms" to task.terms.trim(),
+                "status" to task.status,
+                "active" to (task.status == "published"),
+                "enabled" to (task.status == "published"),
+                "completionsCount" to task.completionsCount,
+                "publishedAt" to (if (task.status == "published" && task.publishedAt == 0L) now else task.publishedAt),
+                "createdAt" to (if (task.createdAt > 0) task.createdAt else now),
                 "updatedAt" to now
             )
             ref.setValue(payload).await()
+
+            val adminUid = auth.currentUser?.uid.orEmpty()
+            database.getReference("adminAudit").push().setValue(
+                mapOf(
+                    "action" to (if (task.taskId.isNotBlank()) "task_updated" else "task_created"),
+                    "taskId" to id,
+                    "title" to task.title.trim(),
+                    "status" to task.status,
+                    "adminUid" to adminUid,
+                    "timestamp" to now
+                )
+            ).await()
+
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
@@ -327,6 +402,39 @@ class ConsoleRepo(
     suspend fun archiveTask(taskId: String): Result<Unit> {
         return try {
             database.getReference(Constants.NODE_TASKS).child(taskId).child("status").setValue("archived").await()
+            val now = System.currentTimeMillis()
+            val adminUid = auth.currentUser?.uid.orEmpty()
+            database.getReference("adminAudit").push().setValue(
+                mapOf("action" to "task_archived", "taskId" to taskId, "adminUid" to adminUid, "timestamp" to now)
+            ).await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun restoreTask(taskId: String): Result<Unit> {
+        return try {
+            database.getReference(Constants.NODE_TASKS).child(taskId).child("status").setValue("published").await()
+            val now = System.currentTimeMillis()
+            val adminUid = auth.currentUser?.uid.orEmpty()
+            database.getReference("adminAudit").push().setValue(
+                mapOf("action" to "task_restored", "taskId" to taskId, "adminUid" to adminUid, "timestamp" to now)
+            ).await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun deleteTask(taskId: String): Result<Unit> {
+        return try {
+            database.getReference(Constants.NODE_TASKS).child(taskId).removeValue().await()
+            val now = System.currentTimeMillis()
+            val adminUid = auth.currentUser?.uid.orEmpty()
+            database.getReference("adminAudit").push().setValue(
+                mapOf("action" to "task_deleted", "taskId" to taskId, "adminUid" to adminUid, "timestamp" to now)
+            ).await()
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
@@ -1171,33 +1279,126 @@ class ConsoleRepo(
         }
     }
 
-    // 19. User Payout Methods
+    // 19. User Payout Methods (Real-time, Joined User Details, Strict Masking)
     fun observePayoutMethods(): Flow<List<PayoutMethodItem>> = callbackFlow {
-        val ref = database.getReference(Constants.NODE_PAYMENT_METHODS)
-        val listener = object : ValueEventListener {
+        val methodsRef = database.getReference(Constants.NODE_PAYMENT_METHODS)
+        val usersRef = database.getReference(Constants.NODE_USERS)
+
+        var usersMap = emptyMap<String, Pair<String, String>>() // uid -> (name, email)
+
+        val usersListener = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                val map = mutableMapOf<String, Pair<String, String>>()
+                for (u in snapshot.children) {
+                    val uid = u.key.orEmpty()
+                    val name = u.child("name").value?.toString() ?: u.child("displayName").value?.toString().orEmpty()
+                    val email = u.child("email").value?.toString().orEmpty()
+                    map[uid] = Pair(name, email)
+                }
+                usersMap = map
+            }
+            override fun onCancelled(error: DatabaseError) {}
+        }
+        usersRef.addValueEventListener(usersListener)
+
+        val methodsListener = object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
                 val list = mutableListOf<PayoutMethodItem>()
                 for (userNode in snapshot.children) {
                     val uid = userNode.key.orEmpty()
+                    val userPair = usersMap[uid]
+                    val ownerName = userPair?.first?.takeIf { it.isNotBlank() } ?: "User not found"
+                    val ownerEmail = userPair?.second.orEmpty()
+
                     for (methodNode in userNode.children) {
-                        val address = methodNode.child("address").value?.toString() ?: methodNode.child("upiId").value?.toString().orEmpty()
-                        val masked = if (address.length > 5) {
-                            address.take(3) + "****" + address.takeLast(3)
-                        } else "****"
-                        list.add(
-                            PayoutMethodItem(
-                                id = methodNode.key.orEmpty(),
-                                uid = uid,
-                                type = methodNode.child("type").value?.toString() ?: "upi",
-                                maskedAddress = masked,
-                                fullAddress = address,
-                                bankName = methodNode.child("bankName").value?.toString().orEmpty(),
-                                accountHolder = methodNode.child("accountHolder").value?.toString().orEmpty(),
-                                active = methodNode.child("active").value as? Boolean ?: true,
-                                disabledReason = methodNode.child("disabledReason").value?.toString(),
-                                createdAt = methodNode.child("createdAt").value?.toString()?.toLongOrNull() ?: 0L
+                        val mKey = methodNode.key.orEmpty()
+                        val mType = methodNode.child("type").value?.toString() ?: mKey
+                        val status = methodNode.child("status").value?.toString() ?: "Unknown"
+                        val disabledReason = methodNode.child("disabledReason").value?.toString()
+                        val createdAt = methodNode.child("createdAt").value?.toString()?.toLongOrNull()
+                            ?: methodNode.child("updatedAt").value?.toString()?.toLongOrNull() ?: 0L
+
+                        if (mType.equals("upi", ignoreCase = true) || methodNode.hasChild("id") || methodNode.hasChild("upiId")) {
+                            val rawId = methodNode.child("id").value?.toString()
+                                ?: methodNode.child("upiId").value?.toString()
+                                ?: methodNode.child("address").value?.toString().orEmpty()
+
+                            val masked = if (rawId.contains("@")) {
+                                val parts = rawId.split("@", limit = 2)
+                                "${parts[0].take(2)}****@${parts.getOrElse(1) { "" }}"
+                            } else if (rawId.isNotBlank()) {
+                                "${rawId.take(2)}****"
+                            } else "****"
+
+                            list.add(
+                                PayoutMethodItem(
+                                    id = mKey,
+                                    uid = uid,
+                                    ownerName = ownerName,
+                                    ownerEmail = ownerEmail,
+                                    type = "upi",
+                                    maskedAddress = masked,
+                                    fullAddress = rawId,
+                                    status = status,
+                                    disabledReason = disabledReason,
+                                    createdAt = createdAt
+                                )
                             )
-                        )
+                        } else if (mType.equals("bank", ignoreCase = true) || methodNode.hasChild("accountNumber")) {
+                            val accNo = methodNode.child("accountNumber").value?.toString().orEmpty()
+                            val bankName = methodNode.child("bankName").value?.toString().orEmpty()
+                            val ifsc = methodNode.child("ifsc").value?.toString().orEmpty()
+                            val holder = methodNode.child("fullName").value?.toString()
+                                ?: methodNode.child("accountHolder").value?.toString().orEmpty()
+
+                            val last4 = if (accNo.length >= 4) accNo.takeLast(4) else accNo
+                            val bankPrefix = if (bankName.isNotBlank() && ifsc.isNotBlank()) {
+                                "$bankName (${ifsc.take(4)}) - "
+                            } else if (bankName.isNotBlank()) {
+                                "$bankName - "
+                            } else ""
+                            val masked = "${bankPrefix}XXXX$last4"
+                            val maskedHolder = if (holder.isNotBlank()) "${holder.take(1)}*****" else "Unknown"
+
+                            list.add(
+                                PayoutMethodItem(
+                                    id = mKey,
+                                    uid = uid,
+                                    ownerName = ownerName,
+                                    ownerEmail = ownerEmail,
+                                    type = "bank",
+                                    maskedAddress = masked,
+                                    fullAddress = if (bankName.isNotBlank()) "$bankName - A/C: $accNo (IFSC: $ifsc)" else accNo,
+                                    bankName = bankName,
+                                    ifsc = ifsc,
+                                    accountHolder = holder,
+                                    maskedAccountHolder = maskedHolder,
+                                    status = status,
+                                    disabledReason = disabledReason,
+                                    createdAt = createdAt
+                                )
+                            )
+                        } else if (mType.equals("redeem", ignoreCase = true) || methodNode.hasChild("email")) {
+                            val email = methodNode.child("email").value?.toString().orEmpty()
+                            val masked = if (email.contains("@")) {
+                                "${email.take(2)}****@${email.substringAfter("@", "")}"
+                            } else "****"
+
+                            list.add(
+                                PayoutMethodItem(
+                                    id = mKey,
+                                    uid = uid,
+                                    ownerName = ownerName,
+                                    ownerEmail = ownerEmail,
+                                    type = "redeem",
+                                    maskedAddress = masked,
+                                    fullAddress = email,
+                                    status = status,
+                                    disabledReason = disabledReason,
+                                    createdAt = createdAt
+                                )
+                            )
+                        }
                     }
                 }
                 trySend(list)
@@ -1206,19 +1407,61 @@ class ConsoleRepo(
                 trySend(emptyList())
             }
         }
-        ref.addValueEventListener(listener)
-        awaitClose { ref.removeEventListener(listener) }
+
+        methodsRef.addValueEventListener(methodsListener)
+        awaitClose {
+            methodsRef.removeEventListener(methodsListener)
+            usersRef.removeEventListener(usersListener)
+        }
+    }
+
+    suspend fun recordPayoutMethodReveal(uid: String, methodId: String, reason: String): Result<Unit> {
+        return try {
+            val now = System.currentTimeMillis()
+            val adminUid = auth.currentUser?.uid.orEmpty()
+            database.getReference("adminAudit").push().setValue(
+                mapOf(
+                    "action" to "payout_method_revealed",
+                    "targetUid" to uid,
+                    "methodId" to methodId,
+                    "reason" to reason.trim(),
+                    "adminUid" to adminUid,
+                    "timestamp" to now
+                )
+            ).await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
     }
 
     suspend fun disablePayoutMethod(uid: String, methodId: String, reason: String): Result<Unit> {
         return try {
-            database.getReference(Constants.NODE_PAYMENT_METHODS).child(uid).child(methodId)
-                .updateChildren(
-                    mapOf(
-                        "active" to false,
-                        "disabledReason" to reason
-                    )
-                ).await()
+            val now = System.currentTimeMillis()
+            val adminUid = auth.currentUser?.uid.orEmpty()
+            val updates = mapOf<String, Any>(
+                "status" to "disabled",
+                "disabledReason" to reason.trim(),
+                "disabledAt" to now,
+                "updatedAt" to now
+            )
+            database.getReference(Constants.NODE_PAYMENT_METHODS)
+                .child(uid)
+                .child(methodId)
+                .updateChildren(updates)
+                .await()
+
+            database.getReference("adminAudit").push().setValue(
+                mapOf(
+                    "action" to "payout_method_disabled",
+                    "targetUid" to uid,
+                    "methodId" to methodId,
+                    "reason" to reason.trim(),
+                    "adminUid" to adminUid,
+                    "timestamp" to now
+                )
+            ).await()
+
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)

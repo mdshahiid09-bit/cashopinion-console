@@ -1,5 +1,7 @@
 package com.cashopinion.console.ui
 
+import android.app.Activity
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -7,7 +9,9 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.cashopinion.console.R
 import com.cashopinion.console.core.AppContainer
@@ -35,7 +39,9 @@ import com.cashopinion.console.ui.screens.tasks.TasksScreen
 import com.cashopinion.console.ui.screens.transactions.TransactionsScreen
 import com.cashopinion.console.ui.screens.users.UsersScreen
 import com.cashopinion.console.ui.screens.withdrawals.WithdrawalsScreen
+import com.cashopinion.console.ui.theme.CashColors
 import com.cashopinion.console.ui.theme.CashTheme
+import com.cashopinion.console.ui.theme.Shapes
 import kotlinx.coroutines.launch
 
 enum class ConsoleTab(val label: String, val iconRes: Int) {
@@ -76,11 +82,74 @@ fun MainAppScreen(
     modifier: Modifier = Modifier
 ) {
     val colors = CashTheme.colors
+    val context = LocalContext.current
+    val activity = context as? Activity
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
 
     var selectedTab by remember { mutableStateOf(ConsoleTab.Home) }
     var activeSubScreen by remember { mutableStateOf(SubScreen.None) }
+    var showExitDialog by remember { mutableStateOf(false) }
+
+    // Section 2.1 & 2.2: Comprehensive Back Navigation & Exit Confirmation
+    BackHandler {
+        if (drawerState.isOpen) {
+            scope.launch { drawerState.close() }
+        } else if (activeSubScreen != SubScreen.None) {
+            SoundFx.playClick()
+            activeSubScreen = SubScreen.None
+        } else if (selectedTab != ConsoleTab.Home) {
+            SoundFx.playClick()
+            selectedTab = ConsoleTab.Home
+        } else {
+            showExitDialog = true
+        }
+    }
+
+    if (showExitDialog) {
+        AlertDialog(
+            onDismissRequest = { showExitDialog = false },
+            title = {
+                Text(
+                    text = "Exit Cash Opinion Console?",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = colors.textPrimary
+                )
+            },
+            text = {
+                Text(
+                    text = "Your session will stay signed in. Real-time updates will stop until you open the app again.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.textSecondary
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        SoundFx.playClick()
+                        showExitDialog = false
+                        activity?.finish()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = CashColors.GoldPrimary)
+                ) {
+                    Text("Exit", color = Color(0xFF140E00), fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        SoundFx.playClick()
+                        showExitDialog = false
+                    }
+                ) {
+                    Text("Stay", color = colors.textSecondary)
+                }
+            },
+            containerColor = colors.surface,
+            shape = Shapes.Dialog
+        )
+    }
 
     ModalNavigationDrawer(
         drawerState = drawerState,

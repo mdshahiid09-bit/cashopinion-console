@@ -636,6 +636,209 @@ app.post('/v1/backup/create', requireAdmin, async (req, res) => {
   }
 });
 
+// Payout Methods: Reveal with Audit (Requires min 5-char reason)
+app.post('/v1/payout-methods/:uid/:methodId/reveal', requireAdmin, checkIdempotency, async (req, res) => {
+  const { uid, methodId } = req.params;
+  const { reason } = req.body;
+
+  if (!reason || reason.trim().length < 5) {
+    return res.status(400).json({ success: false, error: "Valid justification reason (minimum 5 characters) is required for audit compliance." });
+  }
+
+  try {
+    const snap = await db.ref(`paymentMethods/${uid}/${methodId}`).get();
+    if (!snap.exists()) {
+      return res.status(404).json({ success: false, error: "Payment method record not found" });
+    }
+
+    const methodData = snap.val();
+
+    // Record Immutable Audit Trail
+    await db.ref('adminAudit').push({
+      action: "payout_method_revealed",
+      targetUid: uid,
+      methodId,
+      reason: reason.trim(),
+      adminUid: req.adminUid,
+      timestamp: Date.now()
+    });
+
+    const responseBody = { success: true, method: methodData };
+    if (req.requestId) await saveIdempotency(req.requestId, 200, responseBody);
+    return res.json(responseBody);
+  } catch (e) {
+    return res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// Payout Methods: Disable with Reason
+app.post('/v1/payout-methods/:uid/:methodId/disable', requireAdmin, checkIdempotency, async (req, res) => {
+  const { uid, methodId } = req.params;
+  const { reason } = req.body;
+
+  if (!reason || reason.trim().length < 5) {
+    return res.status(400).json({ success: false, error: "Valid reason (minimum 5 characters) is required to disable payout method." });
+  }
+
+  try {
+    const ref = db.ref(`paymentMethods/${uid}/${methodId}`);
+    const snap = await ref.get();
+    if (!snap.exists()) {
+      return res.status(404).json({ success: false, error: "Payment method record not found" });
+    }
+
+    const updates = {
+      status: "disabled",
+      disabledReason: reason.trim(),
+      disabledAt: Date.now(),
+      updatedAt: Date.now()
+    };
+
+    await ref.update(updates);
+
+    await db.ref('adminAudit').push({
+      action: "payout_method_disabled",
+      targetUid: uid,
+      methodId,
+      reason: reason.trim(),
+      adminUid: req.adminUid,
+      timestamp: Date.now()
+    });
+
+    const responseBody = { success: true, status: "disabled" };
+    if (req.requestId) await saveIdempotency(req.requestId, 200, responseBody);
+    return res.json(responseBody);
+  } catch (e) {
+    return res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// Tasks: Create Task (Idempotent, Audited)
+app.post('/v1/tasks', requireAdmin, checkIdempotency, async (req, res) => {
+  const task = req.body.task || req.body;
+  if (!task.title || task.title.trim().length < 3) {
+    return res.status(400).json({ success: false, error: "Task title must be at least 3 characters" });
+  }
+
+  try {
+    const taskRef = task.taskId ? db.ref(`tasks/${task.taskId}`) : db.ref('tasks').push();
+    const taskId = taskRef.key;
+    const now = Date.now();
+
+    const payload = {
+      taskId,
+      title: task.title.trim(),
+      description: (task.description || "").trim(),
+      logoUrl: task.logoUrl || "",
+      link: task.link || "",
+      steps: Array.isArray(task.steps) ? task.steps : [],
+      reward: parseInt(task.reward, 10) || 0,
+      rewardCoins: parseInt(task.reward, 10) || 0,
+      perUserLimit: parseInt(task.perUserLimit, 10) || 1,
+      totalLimit: parseInt(task.totalLimit, 10) || 0,
+      deadline: parseInt(task.deadline, 10) || 0,
+      proofType: task.proofType || "Screenshot",
+      proofHint: (task.proofHint || "").trim(),
+      terms: (task.terms || "").trim(),
+      status: task.status || "draft",
+      completionsCount: 0,
+      publishedAt: task.status === "published" ? now : (task.publishedAt || 0),
+      createdAt: now,
+      updatedAt: now
+    };
+
+    await taskRef.set(payload);
+
+    await db.ref('adminAudit').push({
+      action: "task_created",
+      taskId,
+      title: payload.title,
+      status: payload.status,
+      adminUid: req.adminUid,
+      timestamp: now
+    });
+
+    const responseBody = { success: true, task: payload };
+    if (req.requestId) await saveIdempotency(req.requestId, 200, responseBody);
+    return res.json(responseBody);
+  } catch (e) {
+    return res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// Tasks: Update Task (Locks key fields if completions > 0)
+app.put('/v1/tasks/:id', requireAdmin, checkIdempotency, async (req, res) => {
+  const taskId = req.params.id;
+  const task = req.body.task || req.body;
+
+  try {
+    const taskRef = db.ref(`tasks/${taskId}`);
+    const snap = await taskRef.get();
+    if (!snap.exists()) {
+      return res.status(404).json({ success: false, error: "Task not found" });
+    }
+
+    const existing = snap.val();
+    const now = Date.now();
+    const completions = existing.completionsCount || 0;
+    const hasCompletions = completions > 0;
+
+    const updated = {
+      ...existing,
+      title: task.title ? task.title.trim() : existing.title,
+      description: task.description !== undefined ? task.description.trim() : existing.description,
+      logoUrl: task.logoUrl !== undefined ? task.logoUrl : existing.logoUrl,
+      link: task.link !== undefined ? task.link : existing.link,
+      steps: Array.isArray(task.steps) ? task.steps : existing.steps,
+      deadline: task.deadline !== undefined ? parseInt(task.deadline, 10) : existing.deadline,
+      proofHint: task.proofHint !== undefined ? task.proofHint.trim() : existing.proofHint,
+      terms: task.terms !== undefined ? task.terms.trim() : existing.terms,
+      status: task.status !== undefined ? task.status : existing.status,
+      updatedAt: now
+    };
+
+    // If first completion happened, lock reward, limits, and proofType
+    if (hasCompletions) {
+      updated.reward = existing.reward;
+      updated.rewardCoins = existing.reward;
+      updated.perUserLimit = existing.perUserLimit;
+      updated.totalLimit = existing.totalLimit;
+      updated.proofType = existing.proofType;
+    } else {
+      if (task.reward !== undefined) {
+        updated.reward = parseInt(task.reward, 10);
+        updated.rewardCoins = parseInt(task.reward, 10);
+      }
+      if (task.perUserLimit !== undefined) updated.perUserLimit = parseInt(task.perUserLimit, 10);
+      if (task.totalLimit !== undefined) updated.totalLimit = parseInt(task.totalLimit, 10);
+      if (task.proofType !== undefined) updated.proofType = task.proofType;
+    }
+
+    if (updated.status === "published" && (!existing.publishedAt || existing.publishedAt === 0)) {
+      updated.publishedAt = now;
+    }
+
+    await taskRef.set(updated);
+
+    await db.ref('adminAudit').push({
+      action: "task_updated",
+      taskId,
+      title: updated.title,
+      status: updated.status,
+      hasLockedFields: hasCompletions,
+      adminUid: req.adminUid,
+      timestamp: now
+    });
+
+    const responseBody = { success: true, task: updated };
+    if (req.requestId) await saveIdempotency(req.requestId, 200, responseBody);
+    return res.json(responseBody);
+  } catch (e) {
+    return res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Cash Opinion Console Server running on port ${PORT}`);
