@@ -13,6 +13,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.cashopinion.console.R
 import com.cashopinion.console.core.Constants
+import com.cashopinion.console.data.model.AdsConfig
 import com.cashopinion.console.data.model.SignupBonusConfig
 import com.cashopinion.console.data.repo.ConsoleRepo
 import com.cashopinion.console.ui.theme.CashTheme
@@ -50,6 +51,36 @@ fun ConfigScreen(
         isSignupBonusEnabled = liveBonusConfig.enabled
         signupCoinsWithCode = liveBonusConfig.coins.toString()
         signupCoinsNoCode = liveBonusConfig.noCodeCoins.toString()
+    }
+
+    // Ads Config states (Live stream)
+    val adsFlow = remember(consoleRepo) { consoleRepo.observeAdsConfig() }
+    val liveAdsConfig by adsFlow.collectAsState(initial = AdsConfig())
+
+    var isAdsEnabled by remember { mutableStateOf(true) }
+    var isTestMode by remember { mutableStateOf(true) }
+    var adsGameId by remember { mutableStateOf("800429422") }
+    var adsRewardedPlacementId by remember { mutableStateOf("BP_Rewarded_Android") }
+    var adsInterstitialPlacementId by remember { mutableStateOf("BP_Interstitial_Android") }
+    var adsBannerPlacementId by remember { mutableStateOf("BP_Banner_Android") }
+    var adsInterstitialInterval by remember { mutableStateOf("60") }
+    var adsRewardCoins by remember { mutableStateOf("50") }
+    var isBannerEnabled by remember { mutableStateOf(true) }
+    var isInterstitialEnabled by remember { mutableStateOf(true) }
+    var isRewardedEnabled by remember { mutableStateOf(true) }
+
+    LaunchedEffect(liveAdsConfig) {
+        isAdsEnabled = liveAdsConfig.enabled
+        isTestMode = liveAdsConfig.testMode
+        adsGameId = liveAdsConfig.gameId
+        adsRewardedPlacementId = liveAdsConfig.rewardedPlacementId
+        adsInterstitialPlacementId = liveAdsConfig.interstitialPlacementId
+        adsBannerPlacementId = liveAdsConfig.bannerPlacementId
+        adsInterstitialInterval = liveAdsConfig.interstitialIntervalSeconds.toString()
+        adsRewardCoins = liveAdsConfig.rewardCoins.toString()
+        isBannerEnabled = liveAdsConfig.bannerEnabled
+        isInterstitialEnabled = liveAdsConfig.interstitialEnabled
+        isRewardedEnabled = liveAdsConfig.rewardedEnabled
     }
 
     var statusMessage by remember { mutableStateOf<String?>(null) }
@@ -228,6 +259,131 @@ fun ConfigScreen(
             }
         }
 
+        // 4. Unity Ads Management Card
+        Card(
+            shape = Shapes.Card,
+            colors = CardDefaults.cardColors(containerColor = colors.surface),
+            border = androidx.compose.foundation.BorderStroke(1.dp, colors.border),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text("Unity Ads Monetization", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = colors.textPrimary)
+                        Text("Real-time ad control & network rules", style = MaterialTheme.typography.bodySmall, color = colors.textSecondary)
+                    }
+                    Switch(
+                        checked = isAdsEnabled,
+                        onCheckedChange = { isAdsEnabled = it }
+                    )
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Test Mode (Sandbox)", color = colors.textSecondary)
+                    Switch(
+                        checked = isTestMode,
+                        onCheckedChange = { isTestMode = it }
+                    )
+                }
+
+                OutlinedTextField(
+                    value = adsGameId,
+                    onValueChange = { adsGameId = it },
+                    label = { Text("Unity Game ID (Android)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                OutlinedTextField(
+                    value = adsRewardedPlacementId,
+                    onValueChange = { adsRewardedPlacementId = it },
+                    label = { Text("Rewarded Placement ID") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                OutlinedTextField(
+                    value = adsInterstitialPlacementId,
+                    onValueChange = { adsInterstitialPlacementId = it },
+                    label = { Text("Interstitial Placement ID") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                OutlinedTextField(
+                    value = adsBannerPlacementId,
+                    onValueChange = { adsBannerPlacementId = it },
+                    label = { Text("Banner Placement ID") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedTextField(
+                        value = adsInterstitialInterval,
+                        onValueChange = { adsInterstitialInterval = it.filter { ch -> ch.isDigit() } },
+                        label = { Text("Interstitial Cooldown (sec)") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f)
+                    )
+                    OutlinedTextField(
+                        value = adsRewardCoins,
+                        onValueChange = { adsRewardCoins = it.filter { ch -> ch.isDigit() } },
+                        label = { Text("Reward Coins") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Banner Ad Enabled", color = colors.textSecondary)
+                    Switch(
+                        checked = isBannerEnabled,
+                        onCheckedChange = { isBannerEnabled = it }
+                    )
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Interstitial Ad Enabled", color = colors.textSecondary)
+                    Switch(
+                        checked = isInterstitialEnabled,
+                        onCheckedChange = { isInterstitialEnabled = it }
+                    )
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Rewarded Ad Enabled", color = colors.textSecondary)
+                    Switch(
+                        checked = isRewardedEnabled,
+                        onCheckedChange = { isRewardedEnabled = it }
+                    )
+                }
+            }
+        }
+
         if (statusMessage != null) {
             Text(text = statusMessage!!, color = colors.primary, style = MaterialTheme.typography.bodySmall)
         }
@@ -262,7 +418,24 @@ fun ConfigScreen(
                             )
                         )
 
-                        statusMessage = "All configurations and Signup Bonus settings saved live!"
+                        // Save Unity Ads config
+                        consoleRepo.updateAdsConfig(
+                            AdsConfig(
+                                enabled = isAdsEnabled,
+                                testMode = isTestMode,
+                                gameId = adsGameId.trim(),
+                                rewardedPlacementId = adsRewardedPlacementId.trim(),
+                                interstitialPlacementId = adsInterstitialPlacementId.trim(),
+                                bannerPlacementId = adsBannerPlacementId.trim(),
+                                interstitialIntervalSeconds = adsInterstitialInterval.toLongOrNull() ?: 60L,
+                                rewardCoins = adsRewardCoins.toLongOrNull() ?: 50L,
+                                bannerEnabled = isBannerEnabled,
+                                interstitialEnabled = isInterstitialEnabled,
+                                rewardedEnabled = isRewardedEnabled
+                            )
+                        )
+
+                        statusMessage = "All configurations, Signup Bonus & Unity Ads settings saved live!"
                     } catch (e: Exception) {
                         statusMessage = "Error: ${e.message}"
                     }

@@ -47,6 +47,7 @@ object Constants {
 
     const val NODE_CONFIG = "config"
     const val NODE_CONFIG_APP = "config/app"
+    const val NODE_CONFIG_ADS = "config/ads"
     const val NODE_CONFIG_SEASON = "config/season"
     const val NODE_CONFIG_SPIN = "config/spin"
     const val NODE_CONFIG_LEADERBOARD = "config/leaderboard"

@@ -159,6 +159,22 @@ data class BannerItem(
 )
 
 @Keep
+data class AdsConfig(
+    val enabled: Boolean = true,
+    val testMode: Boolean = true,
+    val gameId: String = "800429422",
+    val rewardedPlacementId: String = "BP_Rewarded_Android",
+    val interstitialPlacementId: String = "BP_Interstitial_Android",
+    val bannerPlacementId: String = "BP_Banner_Android",
+    val interstitialIntervalSeconds: Long = 60L,
+    val rewardCoins: Long = 50L,
+    val dailyAdLimit: Int = 20,
+    val bannerEnabled: Boolean = true,
+    val interstitialEnabled: Boolean = true,
+    val rewardedEnabled: Boolean = true
+)
+
+@Keep
 data class PageItem(
     val id: String = "",
     val title: String = "",

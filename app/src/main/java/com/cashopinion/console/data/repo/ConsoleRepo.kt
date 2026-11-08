@@ -546,6 +546,79 @@ class ConsoleRepo(
         }
     }
 
+    fun observeAdsConfig(): Flow<AdsConfig> = callbackFlow {
+        val ref = database.getReference(Constants.NODE_CONFIG_ADS)
+        val listener = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                if (snapshot.exists()) {
+                    val cfg = AdsConfig(
+                        enabled = snapshot.child("enabled").value as? Boolean ?: true,
+                        testMode = snapshot.child("testMode").value as? Boolean ?: true,
+                        gameId = snapshot.child("gameId").value?.toString() ?: "800429422",
+                        rewardedPlacementId = snapshot.child("rewardedPlacementId").value?.toString() ?: "BP_Rewarded_Android",
+                        interstitialPlacementId = snapshot.child("interstitialPlacementId").value?.toString() ?: "BP_Interstitial_Android",
+                        bannerPlacementId = snapshot.child("bannerPlacementId").value?.toString() ?: "BP_Banner_Android",
+                        interstitialIntervalSeconds = snapshot.child("interstitialIntervalSeconds").value?.toString()?.toLongOrNull() ?: 60L,
+                        rewardCoins = snapshot.child("rewardCoins").value?.toString()?.toLongOrNull() ?: 50L,
+                        dailyAdLimit = snapshot.child("dailyAdLimit").value?.toString()?.toIntOrNull() ?: 20,
+                        bannerEnabled = snapshot.child("bannerEnabled").value as? Boolean ?: true,
+                        interstitialEnabled = snapshot.child("interstitialEnabled").value as? Boolean ?: true,
+                        rewardedEnabled = snapshot.child("rewardedEnabled").value as? Boolean ?: true
+                    )
+                    trySend(cfg)
+                } else {
+                    trySend(AdsConfig())
+                }
+            }
+            override fun onCancelled(error: DatabaseError) {
+                trySend(AdsConfig())
+            }
+        }
+        ref.addValueEventListener(listener)
+        awaitClose { ref.removeEventListener(listener) }
+    }
+
+    suspend fun updateAdsConfig(config: AdsConfig): Result<Unit> {
+        return try {
+            val payload = mapOf(
+                "enabled" to config.enabled,
+                "testMode" to config.testMode,
+                "gameId" to config.gameId.trim(),
+                "rewardedPlacementId" to config.rewardedPlacementId.trim(),
+                "interstitialPlacementId" to config.interstitialPlacementId.trim(),
+                "bannerPlacementId" to config.bannerPlacementId.trim(),
+                "interstitialIntervalSeconds" to config.interstitialIntervalSeconds,
+                "rewardCoins" to config.rewardCoins,
+                "dailyAdLimit" to config.dailyAdLimit,
+                "bannerEnabled" to config.bannerEnabled,
+                "interstitialEnabled" to config.interstitialEnabled,
+                "rewardedEnabled" to config.rewardedEnabled,
+                "updatedAt" to System.currentTimeMillis()
+            )
+            val updates = hashMapOf<String, Any>(
+                Constants.NODE_CONFIG_ADS to payload,
+                "${Constants.NODE_CONFIG_APP}/ads" to payload
+            )
+            database.reference.updateChildren(updates).await()
+
+            val adminUid = auth.currentUser?.uid.orEmpty()
+            database.getReference("adminAudit").push().setValue(
+                mapOf(
+                    "action" to "ads_config_updated",
+                    "enabled" to config.enabled,
+                    "testMode" to config.testMode,
+                    "gameId" to config.gameId.trim(),
+                    "adminUid" to adminUid,
+                    "timestamp" to System.currentTimeMillis()
+                )
+            ).await()
+
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     suspend fun grantSignupBonus(uid: String, amountCoins: Long = 200L): Result<Unit> {
         return try {
             val now = System.currentTimeMillis()
