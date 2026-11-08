@@ -1182,10 +1182,6 @@ class ConsoleRepo(
             Result.failure(e)
         }
     }
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
 
     // 7. Observe Season Config
     fun observeSeasonConfig(): Flow<SeasonConfig> = callbackFlow {
