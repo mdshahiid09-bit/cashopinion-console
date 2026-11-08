@@ -83,7 +83,7 @@ fun WithdrawalsScreen(
         SearchField(
             query = searchQuery,
             onQueryChange = { searchQuery = it },
-            placeholder = "Search by UID, UTR, or UPI ID..."
+            hint = "Search by UID, UTR, or UPI ID..."
         )
 
         Spacer(modifier = Modifier.height(12.dp))

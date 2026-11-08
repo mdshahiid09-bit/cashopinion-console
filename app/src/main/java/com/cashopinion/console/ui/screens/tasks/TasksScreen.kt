@@ -84,7 +84,7 @@ fun TasksScreen(
         SearchField(
             query = searchQuery,
             onQueryChange = { searchQuery = it },
-            placeholder = "Search tasks..."
+            hint = "Search tasks..."
         )
 
         Spacer(modifier = Modifier.height(12.dp))

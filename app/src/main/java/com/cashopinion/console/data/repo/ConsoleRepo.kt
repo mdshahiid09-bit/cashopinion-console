@@ -450,4 +450,897 @@ class ConsoleRepo(
             Result.failure(e)
         }
     }
+
+    // 9. Observe Support Tickets
+    fun observeSupportTickets(): Flow<List<SupportTicketItem>> = callbackFlow {
+        val ref = database.getReference(Constants.NODE_SUPPORT_TICKETS)
+        val listener = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                val list = mutableListOf<SupportTicketItem>()
+                for (child in snapshot.children) {
+                    val msgs = mutableListOf<TicketMessage>()
+                    val msgsSnap = child.child("messages")
+                    for (m in msgsSnap.children) {
+                        msgs.add(
+                            TicketMessage(
+                                sender = m.child("sender").value?.toString().orEmpty(),
+                                text = m.child("text").value?.toString().orEmpty(),
+                                timestamp = m.child("timestamp").value?.toString()?.toLongOrNull() ?: 0L
+                            )
+                        )
+                    }
+                    list.add(
+                        SupportTicketItem(
+                            id = child.key.orEmpty(),
+                            uid = child.child("uid").value?.toString().orEmpty(),
+                            subject = child.child("subject").value?.toString().orEmpty(),
+                            status = child.child("status").value?.toString() ?: "open",
+                            messages = msgs,
+                            createdAt = child.child("createdAt").value?.toString()?.toLongOrNull() ?: 0L,
+                            updatedAt = child.child("updatedAt").value?.toString()?.toLongOrNull() ?: 0L
+                        )
+                    )
+                }
+                trySend(list.sortedByDescending { it.createdAt })
+            }
+            override fun onCancelled(error: DatabaseError) {
+                trySend(emptyList())
+            }
+        }
+        ref.addValueEventListener(listener)
+        awaitClose { ref.removeEventListener(listener) }
+    }
+
+    suspend fun replySupportTicket(ticketId: String, text: String): Result<Unit> {
+        return try {
+            val ref = database.getReference(Constants.NODE_SUPPORT_TICKETS).child(ticketId)
+            val msgRef = ref.child("messages").push()
+            val now = System.currentTimeMillis()
+            msgRef.setValue(
+                mapOf(
+                    "sender" to "admin",
+                    "text" to text,
+                    "timestamp" to now
+                )
+            ).await()
+            ref.updateChildren(
+                mapOf(
+                    "updatedAt" to now,
+                    "status" to "in_progress"
+                )
+            ).await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun updateTicketStatus(ticketId: String, status: String): Result<Unit> {
+        return try {
+            database.getReference(Constants.NODE_SUPPORT_TICKETS).child(ticketId).updateChildren(
+                mapOf(
+                    "status" to status,
+                    "updatedAt" to System.currentTimeMillis()
+                )
+            ).await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    // 10. Broadcast Notifications
+    fun observeNotifications(): Flow<List<NotificationItem>> = callbackFlow {
+        val ref = database.getReference(Constants.NODE_NOTIFICATIONS).child("broadcast")
+        val listener = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                val list = mutableListOf<NotificationItem>()
+                for (child in snapshot.children) {
+                    list.add(
+                        NotificationItem(
+                            id = child.key.orEmpty(),
+                            title = child.child("title").value?.toString().orEmpty(),
+                            message = child.child("message").value?.toString().orEmpty(),
+                            audience = child.child("audience").value?.toString() ?: "all",
+                            sendAt = child.child("sendAt").value?.toString()?.toLongOrNull() ?: 0L,
+                            sentAt = child.child("sentAt").value?.toString()?.toLongOrNull() ?: 0L,
+                            status = child.child("status").value?.toString() ?: "sent"
+                        )
+                    )
+                }
+                trySend(list.sortedByDescending { it.sendAt })
+            }
+            override fun onCancelled(error: DatabaseError) {
+                trySend(emptyList())
+            }
+        }
+        ref.addValueEventListener(listener)
+        awaitClose { ref.removeEventListener(listener) }
+    }
+
+    suspend fun sendBroadcastNotification(title: String, message: String, audience: String): Result<Unit> {
+        return try {
+            val ref = database.getReference(Constants.NODE_NOTIFICATIONS).child("broadcast").push()
+            val now = System.currentTimeMillis()
+            val payload = mapOf(
+                "title" to title,
+                "message" to message,
+                "audience" to audience,
+                "sendAt" to now,
+                "sentAt" to now,
+                "status" to "sent"
+            )
+            ref.setValue(payload).await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    // 11. Popups
+    fun observePopups(): Flow<List<PopupItem>> = callbackFlow {
+        val ref = database.getReference(Constants.NODE_POPUPS)
+        val listener = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                val list = mutableListOf<PopupItem>()
+                for (child in snapshot.children) {
+                    list.add(
+                        PopupItem(
+                            id = child.key.orEmpty(),
+                            title = child.child("title").value?.toString().orEmpty(),
+                            message = child.child("message").value?.toString().orEmpty(),
+                            imageUrl = child.child("imageUrl").value?.toString().orEmpty(),
+                            buttonText = child.child("buttonText").value?.toString().orEmpty(),
+                            buttonLink = child.child("buttonLink").value?.toString().orEmpty(),
+                            active = child.child("active").value as? Boolean ?: true,
+                            showOnce = child.child("showOnce").value as? Boolean ?: false,
+                            startAt = child.child("startAt").value?.toString()?.toLongOrNull() ?: 0L,
+                            endAt = child.child("endAt").value?.toString()?.toLongOrNull() ?: 0L
+                        )
+                    )
+                }
+                trySend(list)
+            }
+            override fun onCancelled(error: DatabaseError) {
+                trySend(emptyList())
+            }
+        }
+        ref.addValueEventListener(listener)
+        awaitClose { ref.removeEventListener(listener) }
+    }
+
+    suspend fun savePopup(item: PopupItem): Result<Unit> {
+        return try {
+            val ref = if (item.id.isBlank()) database.getReference(Constants.NODE_POPUPS).push()
+            else database.getReference(Constants.NODE_POPUPS).child(item.id)
+            val payload = mapOf(
+                "title" to item.title,
+                "message" to item.message,
+                "imageUrl" to item.imageUrl,
+                "buttonText" to item.buttonText,
+                "buttonLink" to item.buttonLink,
+                "active" to item.active,
+                "showOnce" to item.showOnce,
+                "startAt" to item.startAt,
+                "endAt" to item.endAt
+            )
+            ref.setValue(payload).await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun deletePopup(id: String): Result<Unit> {
+        return try {
+            database.getReference(Constants.NODE_POPUPS).child(id).removeValue().await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    // 12. Banners
+    fun observeBanners(): Flow<List<BannerItem>> = callbackFlow {
+        val ref = database.getReference(Constants.NODE_BANNERS)
+        val listener = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                val list = mutableListOf<BannerItem>()
+                for (child in snapshot.children) {
+                    list.add(
+                        BannerItem(
+                            id = child.key.orEmpty(),
+                            imageUrl = child.child("imageUrl").value?.toString().orEmpty(),
+                            linkUrl = child.child("linkUrl").value?.toString().orEmpty(),
+                            order = child.child("order").value?.toString()?.toIntOrNull() ?: 0,
+                            active = child.child("active").value as? Boolean ?: true
+                        )
+                    )
+                }
+                trySend(list.sortedBy { it.order })
+            }
+            override fun onCancelled(error: DatabaseError) {
+                trySend(emptyList())
+            }
+        }
+        ref.addValueEventListener(listener)
+        awaitClose { ref.removeEventListener(listener) }
+    }
+
+    suspend fun saveBanner(item: BannerItem): Result<Unit> {
+        return try {
+            val ref = if (item.id.isBlank()) database.getReference(Constants.NODE_BANNERS).push()
+            else database.getReference(Constants.NODE_BANNERS).child(item.id)
+            val payload = mapOf(
+                "imageUrl" to item.imageUrl,
+                "linkUrl" to item.linkUrl,
+                "order" to item.order,
+                "active" to item.active
+            )
+            ref.setValue(payload).await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun deleteBanner(id: String): Result<Unit> {
+        return try {
+            database.getReference(Constants.NODE_BANNERS).child(id).removeValue().await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    // 13. Promo Codes & Referrals
+    fun observePromoCodes(): Flow<List<PromoCodeItem>> = callbackFlow {
+        val ref = database.getReference(Constants.NODE_PROMO_CODES)
+        val listener = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                val list = mutableListOf<PromoCodeItem>()
+                for (child in snapshot.children) {
+                    list.add(
+                        PromoCodeItem(
+                            code = child.key.orEmpty(),
+                            reward = child.child("reward").value?.toString()?.toLongOrNull() ?: 0L,
+                            usageLimit = child.child("usageLimit").value?.toString()?.toIntOrNull() ?: 100,
+                            usedCount = child.child("usedCount").value?.toString()?.toIntOrNull() ?: 0,
+                            expiresAt = child.child("expiresAt").value?.toString()?.toLongOrNull() ?: 0L,
+                            active = child.child("active").value as? Boolean ?: true,
+                            createdAt = child.child("createdAt").value?.toString()?.toLongOrNull() ?: 0L
+                        )
+                    )
+                }
+                trySend(list.sortedByDescending { it.createdAt })
+            }
+            override fun onCancelled(error: DatabaseError) {
+                trySend(emptyList())
+            }
+        }
+        ref.addValueEventListener(listener)
+        awaitClose { ref.removeEventListener(listener) }
+    }
+
+    suspend fun savePromoCode(item: PromoCodeItem): Result<Unit> {
+        return try {
+            val codeKey = item.code.trim().uppercase()
+            val payload = mapOf(
+                "reward" to item.reward,
+                "usageLimit" to item.usageLimit,
+                "usedCount" to item.usedCount,
+                "expiresAt" to item.expiresAt,
+                "active" to item.active,
+                "createdAt" to if (item.createdAt == 0L) System.currentTimeMillis() else item.createdAt
+            )
+            database.getReference(Constants.NODE_PROMO_CODES).child(codeKey).setValue(payload).await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun deletePromoCode(code: String): Result<Unit> {
+        return try {
+            database.getReference(Constants.NODE_PROMO_CODES).child(code).removeValue().await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    // 14. Gamification Config
+    fun observeLeaderboardConfig(): Flow<LeaderboardConfig> = callbackFlow {
+        val ref = database.getReference(Constants.NODE_CONFIG_LEADERBOARD)
+        val listener = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                trySend(
+                    LeaderboardConfig(
+                        resetTimeIst = snapshot.child("resetTimeIst").value?.toString() ?: "00:00",
+                        winnersCount = snapshot.child("winnersCount").value?.toString()?.toIntOrNull() ?: 10,
+                        firstPrizeCoins = snapshot.child("firstPrizeCoins").value?.toString()?.toLongOrNull() ?: 5000L,
+                        secondPrizeCoins = snapshot.child("secondPrizeCoins").value?.toString()?.toLongOrNull() ?: 3000L,
+                        thirdPrizeCoins = snapshot.child("thirdPrizeCoins").value?.toString()?.toLongOrNull() ?: 1000L
+                    )
+                )
+            }
+            override fun onCancelled(error: DatabaseError) {
+                trySend(LeaderboardConfig())
+            }
+        }
+        ref.addValueEventListener(listener)
+        awaitClose { ref.removeEventListener(listener) }
+    }
+
+    suspend fun saveLeaderboardConfig(config: LeaderboardConfig): Result<Unit> {
+        return try {
+            val payload = mapOf(
+                "resetTimeIst" to config.resetTimeIst,
+                "winnersCount" to config.winnersCount,
+                "firstPrizeCoins" to config.firstPrizeCoins,
+                "secondPrizeCoins" to config.secondPrizeCoins,
+                "thirdPrizeCoins" to config.thirdPrizeCoins
+            )
+            database.getReference(Constants.NODE_CONFIG_LEADERBOARD).updateChildren(payload).await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    fun observeScratchConfig(): Flow<ScratchCardConfig> = callbackFlow {
+        val ref = database.getReference(Constants.NODE_CONFIG_SCRATCH)
+        val listener = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                trySend(
+                    ScratchCardConfig(
+                        enabled = snapshot.child("enabled").value as? Boolean ?: true,
+                        minReward = snapshot.child("minReward").value?.toString()?.toLongOrNull() ?: 10L,
+                        maxReward = snapshot.child("maxReward").value?.toString()?.toLongOrNull() ?: 500L,
+                        probabilityTier = snapshot.child("probabilityTier").value?.toString() ?: "standard"
+                    )
+                )
+            }
+            override fun onCancelled(error: DatabaseError) {
+                trySend(ScratchCardConfig())
+            }
+        }
+        ref.addValueEventListener(listener)
+        awaitClose { ref.removeEventListener(listener) }
+    }
+
+    suspend fun saveScratchConfig(config: ScratchCardConfig): Result<Unit> {
+        return try {
+            val payload = mapOf(
+                "enabled" to config.enabled,
+                "minReward" to config.minReward,
+                "maxReward" to config.maxReward,
+                "probabilityTier" to config.probabilityTier
+            )
+            database.getReference(Constants.NODE_CONFIG_SCRATCH).updateChildren(payload).await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    fun observeSpinConfig(): Flow<SpinConfig> = callbackFlow {
+        val ref = database.getReference(Constants.NODE_CONFIG_SPIN)
+        val listener = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                trySend(
+                    SpinConfig(
+                        thresholdCoins = snapshot.child("thresholdCoins").value?.toString()?.toLongOrNull() ?: 10000L,
+                        spinsGranted = snapshot.child("spinsGranted").value?.toString()?.toIntOrNull() ?: 5,
+                        rollingHours = snapshot.child("rollingHours").value?.toString()?.toIntOrNull() ?: 24
+                    )
+                )
+            }
+            override fun onCancelled(error: DatabaseError) {
+                trySend(SpinConfig())
+            }
+        }
+        ref.addValueEventListener(listener)
+        awaitClose { ref.removeEventListener(listener) }
+    }
+
+    suspend fun saveSpinConfig(config: SpinConfig): Result<Unit> {
+        return try {
+            val payload = mapOf(
+                "thresholdCoins" to config.thresholdCoins,
+                "spinsGranted" to config.spinsGranted,
+                "rollingHours" to config.rollingHours
+            )
+            database.getReference(Constants.NODE_CONFIG_SPIN).updateChildren(payload).await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    // 15. Pages & FAQ
+    fun observePages(): Flow<List<PageItem>> = callbackFlow {
+        val ref = database.getReference(Constants.NODE_PAGES)
+        val listener = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                val list = mutableListOf<PageItem>()
+                for (child in snapshot.children) {
+                    list.add(
+                        PageItem(
+                            id = child.key.orEmpty(),
+                            title = child.child("title").value?.toString().orEmpty(),
+                            body = child.child("body").value?.toString().orEmpty(),
+                            updatedAt = child.child("updatedAt").value?.toString()?.toLongOrNull() ?: 0L
+                        )
+                    )
+                }
+                trySend(list)
+            }
+            override fun onCancelled(error: DatabaseError) {
+                trySend(emptyList())
+            }
+        }
+        ref.addValueEventListener(listener)
+        awaitClose { ref.removeEventListener(listener) }
+    }
+
+    suspend fun savePage(id: String, title: String, body: String): Result<Unit> {
+        return try {
+            val payload = mapOf(
+                "title" to title,
+                "body" to body,
+                "updatedAt" to System.currentTimeMillis()
+            )
+            database.getReference(Constants.NODE_PAGES).child(id).setValue(payload).await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    fun observeFaqs(): Flow<List<FaqItem>> = callbackFlow {
+        val ref = database.getReference(Constants.NODE_FAQ)
+        val listener = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                val list = mutableListOf<FaqItem>()
+                for (child in snapshot.children) {
+                    list.add(
+                        FaqItem(
+                            id = child.key.orEmpty(),
+                            question = child.child("question").value?.toString().orEmpty(),
+                            answer = child.child("answer").value?.toString().orEmpty(),
+                            order = child.child("order").value?.toString()?.toIntOrNull() ?: 0,
+                            active = child.child("active").value as? Boolean ?: true
+                        )
+                    )
+                }
+                trySend(list.sortedBy { it.order })
+            }
+            override fun onCancelled(error: DatabaseError) {
+                trySend(emptyList())
+            }
+        }
+        ref.addValueEventListener(listener)
+        awaitClose { ref.removeEventListener(listener) }
+    }
+
+    suspend fun saveFaq(item: FaqItem): Result<Unit> {
+        return try {
+            val ref = if (item.id.isBlank()) database.getReference(Constants.NODE_FAQ).push()
+            else database.getReference(Constants.NODE_FAQ).child(item.id)
+            val payload = mapOf(
+                "question" to item.question,
+                "answer" to item.answer,
+                "order" to item.order,
+                "active" to item.active
+            )
+            ref.setValue(payload).await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun deleteFaq(id: String): Result<Unit> {
+        return try {
+            database.getReference(Constants.NODE_FAQ).child(id).removeValue().await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    // 16. Live Alerts
+    fun observeLiveAlerts(): Flow<List<AlertItem>> = callbackFlow {
+        val withdrawalsRef = database.getReference(Constants.NODE_WITHDRAWALS)
+        val usersRef = database.getReference(Constants.NODE_USERS)
+        val reviewsRef = database.getReference(Constants.NODE_REVIEW_QUEUE)
+
+        val listener = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                val alerts = mutableListOf<AlertItem>()
+                val now = System.currentTimeMillis()
+                val twoDaysAgo = now - (48 * 3600 * 1000L)
+
+                // Check urgent SLA breaches
+                for (child in snapshot.children) {
+                    val status = child.child("status").value?.toString()
+                    val reqAt = child.child("requestedAt").value?.toString()?.toLongOrNull() ?: 0L
+                    if (status == "pending" && reqAt in 1..twoDaysAgo) {
+                        alerts.add(
+                            AlertItem(
+                                id = "w_${child.key}",
+                                title = "Payout SLA Breach (>48h)",
+                                message = "Withdrawal #${child.key} for ₹${child.child("inrAmount").value} is pending over 48 hours.",
+                                severity = "critical",
+                                timestamp = reqAt
+                            )
+                        )
+                    }
+                }
+                trySend(alerts)
+            }
+            override fun onCancelled(error: DatabaseError) {
+                trySend(emptyList())
+            }
+        }
+        withdrawalsRef.addValueEventListener(listener)
+        awaitClose { withdrawalsRef.removeEventListener(listener) }
+    }
+
+    // 17. Offers & Sponsored Offers
+    fun observeOffers(): Flow<List<OfferItem>> = callbackFlow {
+        val ref = database.getReference(Constants.NODE_OFFERS)
+        val listener = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                val list = mutableListOf<OfferItem>()
+                for (child in snapshot.children) {
+                    val stepsList = mutableListOf<String>()
+                    for (s in child.child("steps").children) {
+                        stepsList.add(s.value?.toString().orEmpty())
+                    }
+                    list.add(
+                        OfferItem(
+                            id = child.key.orEmpty(),
+                            title = child.child("title").value?.toString().orEmpty(),
+                            description = child.child("description").value?.toString().orEmpty(),
+                            sponsorName = child.child("sponsorName").value?.toString().orEmpty(),
+                            logoUrl = child.child("logoUrl").value?.toString().orEmpty(),
+                            reward = child.child("reward").value?.toString()?.toLongOrNull() ?: 0L,
+                            steps = stepsList,
+                            link = child.child("link").value?.toString().orEmpty(),
+                            startTime = child.child("startTime").value?.toString()?.toLongOrNull() ?: 0L,
+                            endTime = child.child("endTime").value?.toString()?.toLongOrNull() ?: 0L,
+                            perUserLimit = child.child("perUserLimit").value?.toString()?.toIntOrNull() ?: 1,
+                            totalLimit = child.child("totalLimit").value?.toString()?.toIntOrNull() ?: 1000,
+                            statusBadgeText = child.child("statusBadgeText").value?.toString() ?: "Available",
+                            category = child.child("category").value?.toString() ?: "General",
+                            sortOrder = child.child("sortOrder").value?.toString()?.toIntOrNull() ?: 0,
+                            status = child.child("status").value?.toString() ?: "active",
+                            active = child.child("active").value as? Boolean ?: true
+                        )
+                    )
+                }
+                trySend(list.sortedBy { it.sortOrder })
+            }
+            override fun onCancelled(error: DatabaseError) {
+                trySend(emptyList())
+            }
+        }
+        ref.addValueEventListener(listener)
+        awaitClose { ref.removeEventListener(listener) }
+    }
+
+    suspend fun saveOffer(item: OfferItem): Result<Unit> {
+        return try {
+            val ref = if (item.id.isBlank()) database.getReference(Constants.NODE_OFFERS).push()
+            else database.getReference(Constants.NODE_OFFERS).child(item.id)
+            val payload = mapOf(
+                "title" to item.title,
+                "description" to item.description,
+                "sponsorName" to item.sponsorName,
+                "logoUrl" to item.logoUrl,
+                "reward" to item.reward,
+                "steps" to item.steps,
+                "link" to item.link,
+                "startTime" to item.startTime,
+                "endTime" to item.endTime,
+                "perUserLimit" to item.perUserLimit,
+                "totalLimit" to item.totalLimit,
+                "statusBadgeText" to item.statusBadgeText,
+                "category" to item.category,
+                "sortOrder" to item.sortOrder,
+                "status" to item.status,
+                "active" to item.active
+            )
+            ref.setValue(payload).await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun archiveOffer(id: String): Result<Unit> {
+        return try {
+            database.getReference(Constants.NODE_OFFERS).child(id).updateChildren(
+                mapOf(
+                    "status" to "ended",
+                    "active" to false
+                )
+            ).await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    fun observeOffersHistory(): Flow<List<OfferHistoryItem>> = callbackFlow {
+        val ref = database.getReference(Constants.NODE_OFFERS_HISTORY)
+        val listener = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                val list = mutableListOf<OfferHistoryItem>()
+                for (child in snapshot.children) {
+                    list.add(
+                        OfferHistoryItem(
+                            id = child.key.orEmpty(),
+                            offerId = child.child("offerId").value?.toString().orEmpty(),
+                            offerTitle = child.child("offerTitle").value?.toString().orEmpty(),
+                            uid = child.child("uid").value?.toString().orEmpty(),
+                            status = child.child("status").value?.toString() ?: "completed",
+                            coinsAwarded = child.child("coinsAwarded").value?.toString()?.toLongOrNull() ?: 0L,
+                            timestamp = child.child("timestamp").value?.toString()?.toLongOrNull() ?: 0L
+                        )
+                    )
+                }
+                trySend(list.sortedByDescending { it.timestamp })
+            }
+            override fun onCancelled(error: DatabaseError) {
+                trySend(emptyList())
+            }
+        }
+        ref.addValueEventListener(listener)
+        awaitClose { ref.removeEventListener(listener) }
+    }
+
+    // 18. Redeem Codes Management
+    fun observeRedeemCodes(): Flow<List<AdminRedeemCodeItem>> = callbackFlow {
+        val ref = database.getReference(Constants.NODE_REDEEM_CODES)
+        val listener = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                val list = mutableListOf<AdminRedeemCodeItem>()
+                for (userNode in snapshot.children) {
+                    for (codeNode in userNode.children) {
+                        list.add(
+                            AdminRedeemCodeItem(
+                                id = codeNode.key.orEmpty(),
+                                plainCode = codeNode.child("plainCode").value?.toString().orEmpty(),
+                                codeHash = codeNode.child("cipher").value?.toString().orEmpty(),
+                                valueCoins = codeNode.child("valueCoins").value?.toString()?.toLongOrNull() ?: 0L,
+                                status = codeNode.child("status").value?.toString() ?: "unused",
+                                redeemedByUid = codeNode.child("redeemedByUid").value?.toString(),
+                                redeemedAt = codeNode.child("redeemedAt").value?.toString()?.toLongOrNull() ?: 0L,
+                                expiresAt = codeNode.child("expiresAt").value?.toString()?.toLongOrNull() ?: 0L,
+                                createdAt = codeNode.child("createdAt").value?.toString()?.toLongOrNull() ?: 0L
+                            )
+                        )
+                    }
+                }
+                trySend(list.sortedByDescending { it.createdAt })
+            }
+            override fun onCancelled(error: DatabaseError) {
+                trySend(emptyList())
+            }
+        }
+        ref.addValueEventListener(listener)
+        awaitClose { ref.removeEventListener(listener) }
+    }
+
+    suspend fun createRedeemCodesBatch(count: Int, coins: Long, expiryDays: Int): Result<List<String>> {
+        return try {
+            val generatedCodes = mutableListOf<String>()
+            val now = System.currentTimeMillis()
+            val expiresAt = now + (expiryDays * 24 * 3600 * 1000L)
+            val batchRef = database.getReference(Constants.NODE_REDEEM_CODES).child("unassigned")
+
+            for (i in 1..count) {
+                val code = "CP-" + java.util.UUID.randomUUID().toString().take(8).uppercase()
+                generatedCodes.add(code)
+                val pushRef = batchRef.push()
+                val payload = mapOf(
+                    "plainCode" to code,
+                    "valueCoins" to coins,
+                    "status" to "unused",
+                    "expiresAt" to expiresAt,
+                    "createdAt" to now
+                )
+                pushRef.setValue(payload).await()
+            }
+            Result.success(generatedCodes)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun disableRedeemCode(codeId: String): Result<Unit> {
+        return try {
+            database.getReference(Constants.NODE_REDEEM_CODES).child("unassigned").child(codeId)
+                .updateChildren(mapOf("status" to "disabled")).await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    // 19. User Payout Methods
+    fun observePayoutMethods(): Flow<List<PayoutMethodItem>> = callbackFlow {
+        val ref = database.getReference(Constants.NODE_PAYMENT_METHODS)
+        val listener = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                val list = mutableListOf<PayoutMethodItem>()
+                for (userNode in snapshot.children) {
+                    val uid = userNode.key.orEmpty()
+                    for (methodNode in userNode.children) {
+                        val address = methodNode.child("address").value?.toString() ?: methodNode.child("upiId").value?.toString().orEmpty()
+                        val masked = if (address.length > 5) {
+                            address.take(3) + "****" + address.takeLast(3)
+                        } else "****"
+                        list.add(
+                            PayoutMethodItem(
+                                id = methodNode.key.orEmpty(),
+                                uid = uid,
+                                type = methodNode.child("type").value?.toString() ?: "upi",
+                                maskedAddress = masked,
+                                fullAddress = address,
+                                bankName = methodNode.child("bankName").value?.toString().orEmpty(),
+                                accountHolder = methodNode.child("accountHolder").value?.toString().orEmpty(),
+                                active = methodNode.child("active").value as? Boolean ?: true,
+                                disabledReason = methodNode.child("disabledReason").value?.toString(),
+                                createdAt = methodNode.child("createdAt").value?.toString()?.toLongOrNull() ?: 0L
+                            )
+                        )
+                    }
+                }
+                trySend(list)
+            }
+            override fun onCancelled(error: DatabaseError) {
+                trySend(emptyList())
+            }
+        }
+        ref.addValueEventListener(listener)
+        awaitClose { ref.removeEventListener(listener) }
+    }
+
+    suspend fun disablePayoutMethod(uid: String, methodId: String, reason: String): Result<Unit> {
+        return try {
+            database.getReference(Constants.NODE_PAYMENT_METHODS).child(uid).child(methodId)
+                .updateChildren(
+                    mapOf(
+                        "active" to false,
+                        "disabledReason" to reason
+                    )
+                ).await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    // 20. Global Transactions Reader
+    fun observeGlobalTransactions(): Flow<List<GlobalTransactionItem>> = callbackFlow {
+        val ref = database.getReference(Constants.NODE_TRANSACTIONS)
+        val listener = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                val list = mutableListOf<GlobalTransactionItem>()
+                for (userNode in snapshot.children) {
+                    val uid = userNode.key.orEmpty()
+                    for (txNode in userNode.children) {
+                        list.add(
+                            GlobalTransactionItem(
+                                txId = txNode.key.orEmpty(),
+                                uid = uid,
+                                type = txNode.child("type").value?.toString().orEmpty(),
+                                amount = txNode.child("amount").value?.toString()?.toLongOrNull() ?: 0L,
+                                title = txNode.child("title").value?.toString().orEmpty(),
+                                refId = txNode.child("refId").value?.toString().orEmpty(),
+                                createdAt = txNode.child("createdAt").value?.toString()?.toLongOrNull() ?: 0L
+                            )
+                        )
+                    }
+                }
+                trySend(list.sortedByDescending { it.createdAt }.take(500))
+            }
+            override fun onCancelled(error: DatabaseError) {
+                trySend(emptyList())
+            }
+        }
+        ref.addValueEventListener(listener)
+        awaitClose { ref.removeEventListener(listener) }
+    }
+
+    // 21. Problem Reports
+    fun observeProblemReports(): Flow<List<ProblemReportItem>> = callbackFlow {
+        val ref = database.getReference(Constants.NODE_REPORTS)
+        val listener = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                val list = mutableListOf<ProblemReportItem>()
+                for (child in snapshot.children) {
+                    list.add(
+                        ProblemReportItem(
+                            id = child.key.orEmpty(),
+                            uid = child.child("uid").value?.toString().orEmpty(),
+                            category = child.child("category").value?.toString() ?: "general",
+                            message = child.child("message").value?.toString().orEmpty(),
+                            deviceInfo = child.child("deviceInfo").value?.toString().orEmpty(),
+                            status = child.child("status").value?.toString() ?: "open",
+                            adminReply = child.child("adminReply").value?.toString().orEmpty(),
+                            createdAt = child.child("createdAt").value?.toString()?.toLongOrNull() ?: 0L,
+                            updatedAt = child.child("updatedAt").value?.toString()?.toLongOrNull() ?: 0L
+                        )
+                    )
+                }
+                trySend(list.sortedByDescending { it.createdAt })
+            }
+            override fun onCancelled(error: DatabaseError) {
+                trySend(emptyList())
+            }
+        }
+        ref.addValueEventListener(listener)
+        awaitClose { ref.removeEventListener(listener) }
+    }
+
+    suspend fun replyProblemReport(reportId: String, reply: String, status: String): Result<Unit> {
+        return try {
+            database.getReference(Constants.NODE_REPORTS).child(reportId).updateChildren(
+                mapOf(
+                    "adminReply" to reply,
+                    "status" to status,
+                    "updatedAt" to System.currentTimeMillis()
+                )
+            ).await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    // 22. Daily Bonus Config
+    fun observeDailyBonusConfig(): Flow<DailyBonusConfig> = callbackFlow {
+        val ref = database.getReference(Constants.NODE_CONFIG_APP).child("dailyBonus")
+        val listener = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                trySend(
+                    DailyBonusConfig(
+                        enabled = snapshot.child("enabled").value as? Boolean ?: true,
+                        baseCoins = snapshot.child("baseCoins").value?.toString()?.toLongOrNull() ?: 50L,
+                        day7BonusCoins = snapshot.child("day7BonusCoins").value?.toString()?.toLongOrNull() ?: 500L,
+                        streakRequiredDays = snapshot.child("streakRequiredDays").value?.toString()?.toIntOrNull() ?: 7,
+                        resetTimeIst = snapshot.child("resetTimeIst").value?.toString() ?: "00:00",
+                        version = snapshot.child("version").value?.toString()?.toIntOrNull() ?: 1
+                    )
+                )
+            }
+            override fun onCancelled(error: DatabaseError) {
+                trySend(DailyBonusConfig())
+            }
+        }
+        ref.addValueEventListener(listener)
+        awaitClose { ref.removeEventListener(listener) }
+    }
+
+    suspend fun saveDailyBonusConfig(config: DailyBonusConfig): Result<Unit> {
+        return try {
+            val payload = mapOf(
+                "enabled" to config.enabled,
+                "baseCoins" to config.baseCoins,
+                "day7BonusCoins" to config.day7BonusCoins,
+                "streakRequiredDays" to config.streakRequiredDays,
+                "resetTimeIst" to config.resetTimeIst,
+                "version" to (config.version + 1)
+            )
+            database.getReference(Constants.NODE_CONFIG_APP).child("dailyBonus").updateChildren(payload).await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
 }

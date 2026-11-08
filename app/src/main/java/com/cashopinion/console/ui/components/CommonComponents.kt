@@ -97,14 +97,14 @@ fun GoldPillButton(
 fun SearchField(
     query: String,
     onQueryChange: (String) -> Unit,
-    placeholder: String = "Search...",
+    hint: String = "Search...",
     modifier: Modifier = Modifier
 ) {
     val colors = CashTheme.colors
     OutlinedTextField(
         value = query,
         onValueChange = onQueryChange,
-        placeholder = { Text(placeholder, color = colors.textSecondary) },
+        label = { Text(hint, color = colors.textSecondary) },
         leadingIcon = {
             Icon(
                 painter = painterResource(id = R.drawable.ic_document),

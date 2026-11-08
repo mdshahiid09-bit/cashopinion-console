@@ -16,3 +16,6 @@ server/.env
 server/service-account.json
 serviceAccountKey.json
 *.log
+releases/
+*.apk
+

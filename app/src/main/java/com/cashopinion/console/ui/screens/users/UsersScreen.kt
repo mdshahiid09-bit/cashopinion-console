@@ -79,7 +79,7 @@ fun UsersScreen(
         SearchField(
             query = searchQuery,
             onQueryChange = { searchQuery = it },
-            placeholder = "Search by name, email, UID, code, device, IP..."
+            hint = "Search by name, email, UID, code, device, IP..."
         )
 
         Spacer(modifier = Modifier.height(16.dp))

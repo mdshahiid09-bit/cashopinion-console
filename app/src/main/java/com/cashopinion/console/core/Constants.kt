@@ -56,4 +56,11 @@ object Constants {
     const val NODE_DEVICE_INDEX = "deviceIndex"
     const val NODE_FRAUD_CONFIG = "fraudConfig"
     const val NODE_BACKUPS = "backups"
+    const val NODE_OFFERS = "offers"
+    const val NODE_OFFERS_HISTORY = "offers_history"
+    const val NODE_REPORTS = "reports"
+    const val NODE_PAYMENT_METHODS = "paymentMethods"
+    const val NODE_REDEEM_CODES = "redeemCodes"
+    const val NODE_SCRATCH_CARDS = "scratchCards"
+    const val NODE_DAILY_BONUS = "dailyBonus"
 }

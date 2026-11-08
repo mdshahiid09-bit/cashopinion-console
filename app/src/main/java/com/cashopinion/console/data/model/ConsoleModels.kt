@@ -216,3 +216,151 @@ data class DailyWithdrawalStat(
     val dateLabel: String = "",
     val amountInr: Double = 0.0
 )
+
+@Keep
+data class LeaderboardConfig(
+    val periods: List<String> = listOf("daily", "weekly", "monthly"),
+    val resetTimeIst: String = "00:00",
+    val winnersCount: Int = 10,
+    val firstPrizeCoins: Long = 5000L,
+    val secondPrizeCoins: Long = 3000L,
+    val thirdPrizeCoins: Long = 1000L
+)
+
+@Keep
+data class ScratchCardConfig(
+    val enabled: Boolean = true,
+    val minReward: Long = 10L,
+    val maxReward: Long = 500L,
+    val probabilityTier: String = "standard"
+)
+
+@Keep
+data class SpinConfig(
+    val thresholdCoins: Long = 10000L,
+    val spinsGranted: Int = 5,
+    val rollingHours: Int = 24,
+    val rewardTiers: List<Long> = listOf(50L, 100L, 200L, 500L, 1000L)
+)
+
+@Keep
+data class BackupItem(
+    val backupId: String = "",
+    val createdAt: Long = 0L,
+    val createdBy: String = "",
+    val sizeBytes: Long = 0L,
+    val status: String = "completed",
+    val checksum: String = "",
+    val recordCounts: String = ""
+)
+
+@Keep
+data class ReferralConfig(
+    val directRewardCoins: Long = 500L,
+    val refereeRewardCoins: Long = 200L,
+    val completionThresholdCoins: Long = 1000L,
+    val maxReferralsPerUser: Int = 100
+)
+
+@Keep
+data class OfferItem(
+    val id: String = "",
+    val title: String = "",
+    val description: String = "",
+    val sponsorName: String = "",
+    val logoUrl: String = "",
+    val reward: Long = 0L,
+    val steps: List<String> = emptyList(),
+    val link: String = "",
+    val startTime: Long = 0L,
+    val endTime: Long = 0L,
+    val perUserLimit: Int = 1,
+    val totalLimit: Int = 1000,
+    val statusBadgeText: String = "Available",
+    val category: String = "General",
+    val sortOrder: Int = 0,
+    val status: String = "active", // active | scheduled | ended | draft
+    val active: Boolean = true
+)
+
+@Keep
+data class OfferHistoryItem(
+    val id: String = "",
+    val offerId: String = "",
+    val offerTitle: String = "",
+    val uid: String = "",
+    val status: String = "completed", // completed | pending | rejected
+    val coinsAwarded: Long = 0L,
+    val timestamp: Long = 0L
+)
+
+@Keep
+data class AdminRedeemCodeItem(
+    val id: String = "",
+    val codeHash: String = "",
+    val plainCode: String = "",
+    val valueCoins: Long = 0L,
+    val status: String = "unused", // unused | redeemed | expired | disabled
+    val redeemedByUid: String? = null,
+    val redeemedAt: Long = 0L,
+    val expiresAt: Long = 0L,
+    val createdAt: Long = 0L
+)
+
+@Keep
+data class PayoutMethodItem(
+    val id: String = "",
+    val uid: String = "",
+    val type: String = "upi", // upi | bank
+    val maskedAddress: String = "",
+    val fullAddress: String = "",
+    val bankName: String = "",
+    val accountHolder: String = "",
+    val active: Boolean = true,
+    val disabledReason: String? = null,
+    val createdAt: Long = 0L
+)
+
+@Keep
+data class GlobalTransactionItem(
+    val txId: String = "",
+    val uid: String = "",
+    val type: String = "",
+    val amount: Long = 0L,
+    val title: String = "",
+    val refId: String = "",
+    val createdAt: Long = 0L
+)
+
+@Keep
+data class ProblemReportItem(
+    val id: String = "",
+    val uid: String = "",
+    val category: String = "general",
+    val message: String = "",
+    val deviceInfo: String = "",
+    val status: String = "open", // open | resolved | closed
+    val adminReply: String = "",
+    val createdAt: Long = 0L,
+    val updatedAt: Long = 0L
+)
+
+@Keep
+data class DailyBonusConfig(
+    val enabled: Boolean = true,
+    val baseCoins: Long = 50L,
+    val day7BonusCoins: Long = 500L,
+    val streakRequiredDays: Int = 7,
+    val resetTimeIst: String = "00:00",
+    val maxClaimsPerDay: Int = 1,
+    val version: Int = 1
+)
+
+@Keep
+data class SpinSegmentItem(
+    val id: Int = 0,
+    val label: String = "",
+    val coins: Long = 0L,
+    val weight: Int = 100,
+    val isBetterLuck: Boolean = false
+)
