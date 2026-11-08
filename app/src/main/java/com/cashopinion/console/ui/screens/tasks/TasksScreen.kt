@@ -30,6 +30,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -38,6 +39,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import coil.compose.AsyncImage
 import com.cashopinion.console.R
 import com.cashopinion.console.data.model.TaskItem
 import com.cashopinion.console.data.repo.ConsoleRepo
@@ -294,7 +296,7 @@ fun TaskCardItem(
             ) {
                 // Logo Circle or Icon
                 if (task.logoUrl.isNotBlank()) {
-                    TaskLogoThumbnail(base64Url = task.logoUrl)
+                    TaskLogoThumbnail(imageUrl = task.logoUrl)
                     Spacer(modifier = Modifier.width(10.dp))
                 }
 
@@ -569,19 +571,6 @@ fun TaskEditorDialog(
         }
     }
 
-    // Image Picker Launcher
-    val imagePickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
-    ) { uri: Uri? ->
-        if (uri != null) {
-            val base64 = processTaskLogoUri(context, uri)
-            if (base64 != null) {
-                logoUrl = base64
-                SoundFx.playSuccess()
-            }
-        }
-    }
-
     // Field-level Validation Rules
     val isTitleValid = title.trim().length in 3..80
     val isDescValid = description.trim().length <= 1000
@@ -753,52 +742,35 @@ fun TaskEditorDialog(
                     )
 
                     Row(
+                        modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        if (logoUrl.isNotBlank()) {
-                            TaskLogoThumbnail(base64Url = logoUrl)
-                            OutlinedButton(
-                                onClick = {
-                                    SoundFx.playClick()
-                                    logoUrl = ""
-                                },
-                                modifier = Modifier.height(36.dp)
-                            ) {
-                                Text("Remove Logo", fontSize = 11.sp, color = colors.error)
-                            }
-                        } else {
-                            Surface(
-                                modifier = Modifier.size(54.dp),
-                                shape = CircleShape,
-                                color = colors.surfaceVariant
-                            ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Icon(
-                                        painter = painterResource(id = R.drawable.ic_document),
-                                        contentDescription = null,
-                                        tint = colors.textSecondary,
-                                        modifier = Modifier.size(24.dp)
-                                    )
-                                }
-                            }
+                        TaskLogoThumbnail(imageUrl = logoUrl)
 
-                            Button(
-                                onClick = {
-                                    SoundFx.playClick()
-                                    imagePickerLauncher.launch("image/*")
-                                },
-                                modifier = Modifier.height(36.dp)
-                            ) {
-                                Icon(
-                                    painter = painterResource(id = R.drawable.ic_sparkle),
-                                    contentDescription = null,
-                                    modifier = Modifier.size(14.dp)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("Pick Logo (Gallery <=150KB)")
-                            }
-                        }
+                        OutlinedTextField(
+                            value = logoUrl,
+                            onValueChange = { logoUrl = it },
+                            label = { Text("App Logo Image URL (e.g. https://.../logo.png)") },
+                            supportingText = { Text("Direct web image URL shown as task app icon in user app") },
+                            trailingIcon = if (logoUrl.isNotBlank()) {
+                                {
+                                    IconButton(onClick = {
+                                        SoundFx.playClick()
+                                        logoUrl = ""
+                                    }) {
+                                        Icon(
+                                            painter = painterResource(id = R.drawable.ic_close),
+                                            contentDescription = "Clear",
+                                            tint = colors.textSecondary,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+                                }
+                            } else null,
+                            modifier = Modifier.weight(1f),
+                            singleLine = true
+                        )
                     }
 
                     OutlinedTextField(
@@ -1435,7 +1407,7 @@ fun TaskUserAppPreviewSheet(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         if (task.logoUrl.isNotBlank()) {
-                            TaskLogoThumbnail(base64Url = task.logoUrl)
+                            TaskLogoThumbnail(imageUrl = task.logoUrl)
                             Spacer(modifier = Modifier.width(12.dp))
                         }
 
@@ -1596,11 +1568,14 @@ fun MetricMiniCard(
 
 @Composable
 fun TaskLogoThumbnail(
-    base64Url: String,
+    imageUrl: String = "",
+    base64Url: String = "",
     modifier: Modifier = Modifier
 ) {
-    val bitmap = remember(base64Url) {
-        decodeBase64ToBitmap(base64Url)
+    val effectiveUrl = imageUrl.ifBlank { base64Url }.trim()
+    val isBase64 = effectiveUrl.startsWith("data:image/") || (!effectiveUrl.startsWith("http://") && !effectiveUrl.startsWith("https://") && effectiveUrl.length > 100)
+    val bitmap = remember(effectiveUrl) {
+        if (isBase64) decodeBase64ToBitmap(effectiveUrl) else null
     }
 
     if (bitmap != null) {
@@ -1611,6 +1586,17 @@ fun TaskLogoThumbnail(
                 .size(44.dp)
                 .clip(CircleShape)
                 .border(1.dp, CashColors.GoldPrimary, CircleShape)
+        )
+    } else if (effectiveUrl.startsWith("http://") || effectiveUrl.startsWith("https://")) {
+        AsyncImage(
+            model = effectiveUrl,
+            contentDescription = "Task Logo",
+            error = painterResource(id = R.drawable.ic_document),
+            modifier = modifier
+                .size(44.dp)
+                .clip(CircleShape)
+                .border(1.dp, CashColors.GoldPrimary, CircleShape),
+            contentScale = ContentScale.Crop
         )
     } else {
         Surface(
