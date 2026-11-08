@@ -179,7 +179,7 @@ fun PayoutMethodsScreen(
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 items(pagedList, key = { "${it.uid}_${it.id}" }) { item ->
-                    val itemKey = "${it.uid}_${it.id}"
+                    val itemKey = "${item.uid}_${item.id}"
                     val isRevealed = revealedKey == itemKey
 
                     LuxuryCard(
