@@ -1,0 +1,301 @@
+{
+  "adminUids": {
+    "BV6iHH8GAeZEDmhnyAeY7JUEKRf1": true
+  },
+  "admins": {
+    "BV6iHH8GAeZEDmhnyAeY7JUEKRf1": true
+  },
+  "adminProfiles": {
+    "BV6iHH8GAeZEDmhnyAeY7JUEKRf1": {
+      "name": "Shahid",
+      "email": "officialshahid156@gmail.com",
+      "role": "super",
+      "photo": "",
+      "createdAt": 1731000000000,
+      "updatedAt": 1731000000000
+    }
+  },
+  "config": {
+    "app": {
+      "coinsPerCurrencyUnit": 1000,
+      "currencySymbol": "\u20b9",
+      "currencyCode": "INR",
+      "dailyCheckInReward": 50,
+      "defaultLanguage": "en",
+      "isMaintenance": false,
+      "maintenanceMessage": "System update in progress. Please check back shortly.",
+      "minAppVersion": "1.1.28",
+      "minAppVersionCode": 138,
+      "referralBonusCoins": 200,
+      "supportEmail": "officialshahid156@gmail.com",
+      "termsUrl": "https://cashopinion.app/terms",
+      "privacyUrl": "https://cashopinion.app/privacy"
+    },
+    "season": {
+      "seasonId": "season_1",
+      "seasonName": "Season 1",
+      "version": 1,
+      "status": "active",
+      "startsAt": 1731000000000,
+      "warningStartsAt": 1733592000000,
+      "warningTitle": "Season 1 Ending Soon",
+      "warningBody": "Season 1 is drawing to a close. Complete pending tasks and claim your seasonal rank bonuses.",
+      "balanceNote": "Your balance will carry over to the new season.",
+      "termsUrl": "https://cashopinion.app/season-terms",
+      "newSeasonTitle": "Welcome to Season 1",
+      "newSeasonBody": "Compete with users across India, complete opinions, and earn real rewards!",
+      "summaryEnabled": false,
+      "previousSeasonId": ""
+    },
+    "spin": {
+      "dailyFreeSpins": 5,
+      "cooldownSeconds": 1800,
+      "slices": [
+        10,
+        25,
+        50,
+        100,
+        200,
+        500,
+        20,
+        75
+      ]
+    },
+    "spinThresholdReward": {
+      "requiredCoins": 500,
+      "spinsReward": 2
+    },
+    "scratch": {
+      "enabled": true,
+      "minReward": 10,
+      "maxReward": 250,
+      "dailyLimit": 3
+    },
+    "leaderboard": {
+      "enabled": true,
+      "refreshIntervalMinutes": 15,
+      "topRewards": {
+        "rank1": 10000,
+        "rank2": 5000,
+        "rank3": 2500,
+        "rank4_10": 1000
+      }
+    },
+    "payout": {
+      "minWithdrawalCoins": 5000,
+      "maxWithdrawalCoins": 500000,
+      "dailyWithdrawalLimit": 1,
+      "tdsPercent": 0,
+      "adminFeePercent": 0
+    },
+    "streak": {
+      "days": [
+        20,
+        30,
+        50,
+        75,
+        100,
+        150,
+        300
+      ]
+    }
+  },
+  "tasks": {
+    "task_welcome_survey": {
+      "id": "task_welcome_survey",
+      "title": "Welcome Opinion Survey",
+      "description": "Complete our introductory survey to help tailor relevant questions to your profile and earn instant starter coins.",
+      "targetLink": "https://cashopinion.app/survey",
+      "reward": 250,
+      "rewardCoins": 250,
+      "coins": 250,
+      "status": "published",
+      "active": true,
+      "order": 1,
+      "proofType": "Optional",
+      "proofHint": "Submission is verified automatically. Proof is optional.",
+      "terms": "Must submit honest answers. Single completion per user account.",
+      "perUserLimit": 1,
+      "totalLimit": 50000,
+      "completedCount": 0,
+      "createdAt": 1731000000000
+    },
+    "task_setup_payout": {
+      "id": "task_setup_payout",
+      "title": "Add Payout UPI / Paytm",
+      "description": "Add and verify your UPI ID or Paytm wallet in your profile to prepare your account for instant coin cashouts.",
+      "targetLink": "",
+      "reward": 150,
+      "rewardCoins": 150,
+      "coins": 150,
+      "status": "published",
+      "active": true,
+      "order": 2,
+      "proofType": "Optional",
+      "proofHint": "Add payment method inside profile settings. No external proof required.",
+      "terms": "Must be an active and valid payment handle.",
+      "perUserLimit": 1,
+      "totalLimit": 50000,
+      "completedCount": 0,
+      "createdAt": 1731000000000
+    },
+    "task_join_telegram": {
+      "id": "task_join_telegram",
+      "title": "Join Official Telegram Channel",
+      "description": "Subscribe to our official Telegram channel for daily promo codes, high-reward opinion drops, and app notifications.",
+      "targetLink": "https://t.me/cashopinion",
+      "reward": 300,
+      "rewardCoins": 300,
+      "coins": 300,
+      "status": "published",
+      "active": true,
+      "order": 3,
+      "proofType": "Optional",
+      "proofHint": "Tap the link and join. Proof is optional.",
+      "terms": "Stay subscribed to retain reward coins.",
+      "perUserLimit": 1,
+      "totalLimit": 100000,
+      "completedCount": 0,
+      "createdAt": 1731000000000
+    }
+  },
+  "banners": {
+    "banner_season_1": {
+      "id": "banner_season_1",
+      "title": "Season 1 Is Live!",
+      "imageUrl": "https://images.unsplash.com/photo-1559526324-4b87b5e36e44?w=800&q=80",
+      "targetUrl": "screen:season",
+      "order": 1,
+      "active": true,
+      "createdAt": 1731000000000
+    },
+    "banner_referral": {
+      "id": "banner_referral",
+      "title": "Invite Friends & Earn 200 Coins",
+      "imageUrl": "https://images.unsplash.com/photo-1526304640581-d334cdbbf45e?w=800&q=80",
+      "targetUrl": "screen:referral",
+      "order": 2,
+      "active": true,
+      "createdAt": 1731000000000
+    }
+  },
+  "popups": {
+    "popup_welcome": {
+      "id": "popup_welcome",
+      "title": "Welcome to Cash Opinion!",
+      "body": "Share your opinions, complete easy tasks, spin the wheel, and withdraw real money directly to UPI or Paytm.",
+      "imageUrl": "",
+      "actionText": "Start Earning",
+      "actionUrl": "screen:tasks",
+      "active": true,
+      "dismissible": true,
+      "priority": 1,
+      "showCountLimit": 1,
+      "createdAt": 1731000000000
+    }
+  },
+  "pages": {
+    "terms": {
+      "id": "terms",
+      "title": "Terms & Conditions",
+      "slug": "terms",
+      "content": "Welcome to Cash Opinion. By using this service, you agree that rewards and coin redemption are subject to compliance reviews. Multi-accounting, emulator exploitation, VPN tampering, or automated bots will result in immediate termination of access and forfeiture of balances.",
+      "updatedAt": 1731000000000
+    },
+    "privacy": {
+      "id": "privacy",
+      "title": "Privacy Policy",
+      "slug": "privacy",
+      "content": "Cash Opinion collects minimal device information and account credentials solely for fraud prevention and payout fulfillment. We do not sell or rent your information to third-party advertisers.",
+      "updatedAt": 1731000000000
+    }
+  },
+  "faq": {
+    "faq_1": {
+      "id": "faq_1",
+      "question": "How do I earn coins in Cash Opinion?",
+      "answer": "You earn coins by answering opinion surveys, daily check-ins, spinning the wheel, scratching cards, and inviting friends.",
+      "order": 1
+    },
+    "faq_2": {
+      "id": "faq_2",
+      "question": "What is the coin conversion rate?",
+      "answer": "1,000 coins equal \u20b91 INR. Minimum withdrawal is 5,000 coins (\u20b95).",
+      "order": 2
+    },
+    "faq_3": {
+      "id": "faq_3",
+      "question": "How are task submissions approved?",
+      "answer": "Proof is optional for standard tasks. Once submitted, administrators review the submission and award coins directly to your wallet.",
+      "order": 3
+    },
+    "faq_4": {
+      "id": "faq_4",
+      "question": "How long do withdrawals take?",
+      "answer": "Withdrawal requests are processed within 24 to 48 hours directly to your verified UPI ID or Paytm wallet.",
+      "order": 4
+    }
+  },
+  "paymentMethods": {
+    "upi": {
+      "id": "upi",
+      "title": "UPI (Google Pay / PhonePe / Paytm)",
+      "type": "upi",
+      "minCoins": 5000,
+      "maxCoins": 500000,
+      "feeCoins": 0,
+      "active": true,
+      "icon": "upi"
+    },
+    "paytm": {
+      "id": "paytm",
+      "title": "Paytm Wallet",
+      "type": "wallet",
+      "minCoins": 5000,
+      "maxCoins": 200000,
+      "feeCoins": 0,
+      "active": true,
+      "icon": "paytm"
+    },
+    "bank": {
+      "id": "bank",
+      "title": "Bank Account (IMPS/NEFT)",
+      "type": "bank",
+      "minCoins": 20000,
+      "maxCoins": 1000000,
+      "feeCoins": 0,
+      "active": true,
+      "icon": "bank"
+    }
+  },
+  "rejectReasonTemplates": {
+    "tmpl_incomplete": {
+      "id": "tmpl_incomplete",
+      "title": "Task Incomplete",
+      "text": "The required task steps were not completed.",
+      "order": 1
+    },
+    "tmpl_invalid_details": {
+      "id": "tmpl_invalid_details",
+      "title": "Invalid Details",
+      "text": "The submitted information could not be verified.",
+      "order": 2
+    },
+    "tmpl_duplicate": {
+      "id": "tmpl_duplicate",
+      "title": "Duplicate Submission",
+      "text": "This task was already completed by this account or device.",
+      "order": 3
+    }
+  },
+  "promoCodes": {
+    "WELCOME50": {
+      "code": "WELCOME50",
+      "rewardCoins": 50,
+      "maxUses": 10000,
+      "usedCount": 0,
+      "active": true,
+      "expiresAt": 1762536000000
+    }
+  }
+}
