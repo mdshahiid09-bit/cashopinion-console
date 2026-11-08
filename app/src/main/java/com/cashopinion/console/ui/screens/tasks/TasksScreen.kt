@@ -482,7 +482,7 @@ fun TaskEditorDialog(
     var perUserLimitStr by remember { mutableStateOf(initialTask.perUserLimit.toString()) }
     var totalLimitStr by remember { mutableStateOf(if (initialTask.totalLimit > 0) initialTask.totalLimit.toString() else "") }
     var deadlineStr by remember { mutableStateOf(if (initialTask.deadline > 0) formatEpochToIst(initialTask.deadline) else "") }
-    var proofType by remember { mutableStateOf(initialTask.proofType.ifBlank { "Screenshot" }) }
+    var proofType by remember { mutableStateOf(initialTask.proofType.ifBlank { "Optional" }) }
     var proofHint by remember { mutableStateOf(initialTask.proofHint) }
     var terms by remember { mutableStateOf(initialTask.terms) }
     var publishImmediately by remember { mutableStateOf(initialTask.status == "published") }
@@ -505,7 +505,7 @@ fun TaskEditorDialog(
                 rewardStr != (if (initialTask.reward > 0) initialTask.reward.toString() else "100") ||
                 perUserLimitStr != initialTask.perUserLimit.toString() ||
                 totalLimitStr != (if (initialTask.totalLimit > 0) initialTask.totalLimit.toString() else "") ||
-                proofType != (initialTask.proofType.ifBlank { "Screenshot" }) ||
+                proofType != (initialTask.proofType.ifBlank { "Optional" }) ||
                 proofHint != initialTask.proofHint ||
                 terms != initialTask.terms ||
                 publishImmediately != (initialTask.status == "published")
@@ -895,7 +895,7 @@ fun TaskEditorDialog(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    listOf("Screenshot", "Text", "Link").forEach { typeOption ->
+                    listOf("Optional", "Screenshot", "Text", "Link").forEach { typeOption ->
                         FilterChip(
                             selected = proofType.equals(typeOption, ignoreCase = true),
                             onClick = {
@@ -905,9 +905,16 @@ fun TaskEditorDialog(
                                 }
                             },
                             enabled = !hasCompletions,
-                            label = { Text(typeOption) }
+                            label = { Text(if (typeOption == "Optional") "Optional (No Proof)" else typeOption) }
                         )
                     }
+                }
+                if (proofType.equals("Optional", ignoreCase = true)) {
+                    Text(
+                        text = "Proof is optional. Users can complete task and submit without proof, and admin can approve or reject directly.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = colors.primary
+                    )
                 }
                 if (hasCompletions) {
                     Text(

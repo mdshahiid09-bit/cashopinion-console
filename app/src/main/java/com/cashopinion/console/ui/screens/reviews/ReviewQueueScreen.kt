@@ -11,10 +11,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.cashopinion.console.R
 import com.cashopinion.console.data.model.ReviewItem
 import com.cashopinion.console.data.repo.ConsoleRepo
 import com.cashopinion.console.ui.components.EmptyStateView
+import com.cashopinion.console.ui.components.SoundFx
 import com.cashopinion.console.ui.theme.CashTheme
 import com.cashopinion.console.ui.theme.Shapes
 import kotlinx.coroutines.launch
@@ -52,13 +54,13 @@ fun ReviewQueueScreen(
         ) {
             Column {
                 Text(
-                    text = "Review Queue",
+                    text = "Proof & Task Review Queue",
                     style = MaterialTheme.typography.headlineMedium,
                     color = colors.textPrimary,
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    text = "${pendingReviews.size} Submissions Pending",
+                    text = "${pendingReviews.size} Submissions Pending (Includes proof & optional submissions)",
                     style = MaterialTheme.typography.bodySmall,
                     color = colors.textSecondary
                 )
@@ -81,10 +83,12 @@ fun ReviewQueueScreen(
                     ReviewCard(
                         review = review,
                         onApprove = {
+                            SoundFx.playClick()
                             selectedReviewForAction = review
                             actionType = "approve"
                         },
                         onReject = {
+                            SoundFx.playClick()
                             selectedReviewForAction = review
                             actionType = "reject"
                             rejectReason = ""
@@ -98,6 +102,8 @@ fun ReviewQueueScreen(
     // Confirmation Dialog
     if (selectedReviewForAction != null && actionType != null) {
         val review = selectedReviewForAction!!
+        val isProofEmpty = review.proof.isBlank() || review.proof.equals("none", true) || review.proof.equals("optional", true)
+
         AlertDialog(
             onDismissRequest = {
                 if (!isProcessing) {
@@ -107,27 +113,40 @@ fun ReviewQueueScreen(
             },
             title = {
                 Text(
-                    text = if (actionType == "approve") "Approve Submission" else "Reject Submission",
+                    text = if (actionType == "approve") "Approve Submission & Award Coins" else "Reject Submission",
                     color = colors.textPrimary,
                     fontWeight = FontWeight.Bold
                 )
             },
             text = {
-                Column {
-                    Text("User: ${review.uid}", color = colors.textSecondary)
-                    Text("Task ID: ${review.taskId}", color = colors.textSecondary)
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("User UID: ${review.uid}", color = colors.textSecondary, style = MaterialTheme.typography.bodySmall)
+                    Text("Task: ${review.taskTitle.ifBlank { review.taskId }}", color = colors.textSecondary, style = MaterialTheme.typography.bodySmall)
 
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text("Proof Provided:", fontWeight = FontWeight.SemiBold, color = colors.textPrimary)
-                    Text(text = review.proof, color = colors.primary)
+                    HorizontalDivider(color = colors.border.copy(alpha = 0.5f))
+
+                    Text("Proof Submission Status:", fontWeight = FontWeight.Bold, color = colors.textPrimary)
+                    Surface(
+                        shape = Shapes.Chip,
+                        color = if (isProofEmpty) colors.primary.copy(alpha = 0.15f) else colors.surfaceVariant,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = if (isProofEmpty) "Proof Optional: Submitted directly without mandatory file/text proof." else review.proof,
+                            color = if (isProofEmpty) colors.primary else colors.textPrimary,
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.padding(10.dp)
+                        )
+                    }
 
                     if (actionType == "reject") {
-                        Spacer(modifier = Modifier.height(12.dp))
+                        Spacer(modifier = Modifier.height(4.dp))
                         OutlinedTextField(
                             value = rejectReason,
                             onValueChange = { rejectReason = it },
-                            label = { Text("Rejection Reason") },
-                            modifier = Modifier.fillMaxWidth()
+                            label = { Text("Rejection Reason (e.g. Terms not met)") },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true
                         )
                     }
                 }
@@ -138,16 +157,21 @@ fun ReviewQueueScreen(
                         isProcessing = true
                         scope.launch {
                             if (actionType == "approve") {
-                                consoleRepo.serverClient.approveReview(review.id)
+                                consoleRepo.approveReview(review)
+                                SoundFx.playSuccess()
                             } else {
-                                consoleRepo.serverClient.rejectReview(review.id, rejectReason)
+                                consoleRepo.rejectReview(review, rejectReason)
+                                SoundFx.playWarning()
                             }
                             isProcessing = false
                             selectedReviewForAction = null
                             actionType = null
                         }
                     },
-                    enabled = !isProcessing && (actionType == "approve" || rejectReason.isNotBlank())
+                    enabled = !isProcessing && (actionType == "approve" || rejectReason.isNotBlank()),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (actionType == "approve") colors.success else colors.error
+                    )
                 ) {
                     Text(if (isProcessing) "Processing..." else "Confirm")
                 }
@@ -178,6 +202,7 @@ fun ReviewCard(
     val colors = CashTheme.colors
     val now = System.currentTimeMillis()
     val isOlderThan48h = review.submittedAt > 0 && (now - review.submittedAt) > (48 * 3600 * 1000L)
+    val isProofEmpty = review.proof.isBlank() || review.proof.equals("none", true) || review.proof.equals("optional", true)
 
     val dateStr = remember(review.submittedAt) {
         if (review.submittedAt > 0) {
@@ -201,10 +226,11 @@ fun ReviewCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Task: ${review.taskId}",
+                    text = review.taskTitle.ifBlank { "Task: ${review.taskId}" },
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
-                    color = colors.textPrimary
+                    color = colors.textPrimary,
+                    modifier = Modifier.weight(1f)
                 )
 
                 if (isOlderThan48h) {
@@ -230,15 +256,53 @@ fun ReviewCard(
 
             Surface(
                 shape = Shapes.Chip,
-                color = colors.surfaceVariant,
+                color = if (isProofEmpty) colors.primary.copy(alpha = 0.12f) else colors.surfaceVariant,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text(
-                    text = "Proof: ${review.proof}",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = colors.textPrimary,
-                    modifier = Modifier.padding(10.dp)
-                )
+                Column(modifier = Modifier.padding(10.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = if (isProofEmpty) "Proof: Optional (No proof required)" else "Proof Submitted (${review.proofType}):",
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.Bold,
+                            color = if (isProofEmpty) colors.primary else colors.textPrimary
+                        )
+
+                        if (isProofEmpty) {
+                            Surface(
+                                shape = Shapes.Chip,
+                                color = colors.primary.copy(alpha = 0.18f)
+                            ) {
+                                Text(
+                                    text = "PROOF OPTIONAL",
+                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp, fontWeight = FontWeight.Bold),
+                                    color = colors.primary,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
+                    }
+
+                    if (!isProofEmpty) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = review.proof,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = colors.textPrimary
+                        )
+                    } else if (review.trackedUsageMs > 0L) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "Tracked In-App Usage: ${review.trackedUsageMs / 1000}s",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = colors.textSecondary
+                        )
+                    }
+                }
             }
 
             Spacer(modifier = Modifier.height(12.dp))

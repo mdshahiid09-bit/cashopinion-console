@@ -441,7 +441,7 @@ class ConsoleRepo(
         }
     }
 
-    // 6. Observe Review Queue
+    // 6. Observe Review Queue (Supports Proof Optional / Direct Submissions)
     fun observeReviewQueue(): Flow<List<ReviewItem>> = callbackFlow {
         val ref = database.getReference(Constants.NODE_REVIEW_QUEUE)
         val listener = object : ValueEventListener {
@@ -451,9 +451,14 @@ class ConsoleRepo(
                     val id = child.key.orEmpty()
                     val uid = child.child("uid").value?.toString().orEmpty()
                     val taskId = child.child("taskId").value?.toString().orEmpty()
+                    val taskTitle = child.child("taskTitle").value?.toString()
+                        ?: child.child("title").value?.toString().orEmpty()
                     val proof = child.child("proof").value?.toString()
                         ?: child.child("proofText").value?.toString()
                         ?: child.child("screenshotUrl").value?.toString().orEmpty()
+                    val proofType = child.child("proofType").value?.toString()
+                        ?: (if (proof.isNotBlank()) "Submitted" else "Optional")
+                    val trackedUsageMs = child.child("trackedUsageMs").value?.toString()?.toLongOrNull() ?: 0L
                     val status = child.child("status").value?.toString() ?: "pending"
                     val subAt = child.child("submittedAt").value?.toString()?.toLongOrNull() ?: 0L
 
@@ -462,7 +467,10 @@ class ConsoleRepo(
                             id = id,
                             uid = uid,
                             taskId = taskId,
+                            taskTitle = taskTitle,
                             proof = proof,
+                            proofType = proofType,
+                            trackedUsageMs = trackedUsageMs,
                             status = status,
                             submittedAt = subAt
                         )
@@ -478,6 +486,117 @@ class ConsoleRepo(
         }
         ref.addValueEventListener(listener)
         awaitClose { ref.removeEventListener(listener) }
+    }
+
+    suspend fun approveReview(review: ReviewItem): Result<Unit> {
+        return try {
+            val sResult = serverClient.approveReview(review.id)
+            if (sResult.isSuccess) {
+                return Result.success(Unit)
+            }
+
+            val now = System.currentTimeMillis()
+            val adminUid = auth.currentUser?.uid.orEmpty()
+
+            val taskSnap = database.getReference(Constants.NODE_TASKS).child(review.taskId).get().await()
+            val reward = (taskSnap.child("reward").value?.toString()?.toLongOrNull())
+                ?: (taskSnap.child("rewardCoins").value?.toString()?.toLongOrNull())
+                ?: (taskSnap.child("coins").value?.toString()?.toLongOrNull()) ?: 0L
+            val taskTitle = review.taskTitle.ifBlank {
+                taskSnap.child("title").value?.toString() ?: review.taskId
+            }
+
+            val updates = hashMapOf<String, Any>(
+                "${Constants.NODE_REVIEW_QUEUE}/${review.id}/status" to "approved",
+                "${Constants.NODE_REVIEW_QUEUE}/${review.id}/reviewedBy" to adminUid,
+                "${Constants.NODE_REVIEW_QUEUE}/${review.id}/reviewedAt" to now,
+                "${Constants.NODE_USER_TASKS}/${review.uid}/${review.taskId}/status" to "approved",
+                "${Constants.NODE_USER_TASKS}/${review.uid}/${review.taskId}/coinsAwarded" to reward,
+                "${Constants.NODE_USER_TASKS}/${review.uid}/${review.taskId}/reviewedBy" to adminUid,
+                "${Constants.NODE_USER_TASKS}/${review.uid}/${review.taskId}/reviewedAt" to now
+            )
+
+            if (reward > 0L) {
+                val txRef = database.getReference(Constants.NODE_TRANSACTIONS).child(review.uid).push()
+                val txId = txRef.key ?: UUID.randomUUID().toString()
+                val txPayload = mapOf(
+                    "id" to txId,
+                    "type" to "credit",
+                    "source" to "task_reward",
+                    "amount" to reward,
+                    "taskId" to review.taskId,
+                    "description" to "Task reward: $taskTitle",
+                    "createdAt" to now
+                )
+                updates["${Constants.NODE_TRANSACTIONS}/${review.uid}/$txId"] = txPayload
+                updates["${Constants.NODE_USER_LEDGER}/${review.uid}/$txId"] = txPayload
+                updates["${Constants.NODE_USERS}/${review.uid}/earnings/$txId"] = mapOf(
+                    "amount" to reward,
+                    "source" to "task",
+                    "timestamp" to now
+                )
+                database.getReference(Constants.NODE_WALLETS).child(review.uid).child("coins")
+                    .setValue(com.google.firebase.database.ServerValue.increment(reward)).await()
+            }
+
+            database.reference.updateChildren(updates).await()
+
+            database.getReference("adminAudit").push().setValue(
+                mapOf(
+                    "action" to "task_review_approved",
+                    "reviewId" to review.id,
+                    "uid" to review.uid,
+                    "taskId" to review.taskId,
+                    "proofType" to review.proofType,
+                    "rewardAwarded" to reward,
+                    "adminUid" to adminUid,
+                    "timestamp" to now
+                )
+            ).await()
+
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun rejectReview(review: ReviewItem, reason: String): Result<Unit> {
+        return try {
+            val sResult = serverClient.rejectReview(review.id, reason)
+            if (sResult.isSuccess) {
+                return Result.success(Unit)
+            }
+
+            val now = System.currentTimeMillis()
+            val adminUid = auth.currentUser?.uid.orEmpty()
+            val updates = hashMapOf<String, Any>(
+                "${Constants.NODE_REVIEW_QUEUE}/${review.id}/status" to "rejected",
+                "${Constants.NODE_REVIEW_QUEUE}/${review.id}/rejectionReason" to reason.trim(),
+                "${Constants.NODE_REVIEW_QUEUE}/${review.id}/reviewedBy" to adminUid,
+                "${Constants.NODE_REVIEW_QUEUE}/${review.id}/reviewedAt" to now,
+                "${Constants.NODE_USER_TASKS}/${review.uid}/${review.taskId}/status" to "rejected",
+                "${Constants.NODE_USER_TASKS}/${review.uid}/${review.taskId}/rejectionReason" to reason.trim(),
+                "${Constants.NODE_USER_TASKS}/${review.uid}/${review.taskId}/reviewedBy" to adminUid,
+                "${Constants.NODE_USER_TASKS}/${review.uid}/${review.taskId}/reviewedAt" to now
+            )
+            database.reference.updateChildren(updates).await()
+
+            database.getReference("adminAudit").push().setValue(
+                mapOf(
+                    "action" to "task_review_rejected",
+                    "reviewId" to review.id,
+                    "uid" to review.uid,
+                    "taskId" to review.taskId,
+                    "reason" to reason.trim(),
+                    "adminUid" to adminUid,
+                    "timestamp" to now
+                )
+            ).await()
+
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
     }
 
     // 7. Observe Season Config

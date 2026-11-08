@@ -78,6 +78,8 @@ data class ReviewItem(
     val taskId: String = "",
     val taskTitle: String = "",
     val proof: String = "",
+    val proofType: String = "Optional",
+    val trackedUsageMs: Long = 0L,
     val submittedAt: Long = 0L,
     val assignedTo: String = "",
     val status: String = "pending",
