@@ -420,6 +420,101 @@ app.post('/v1/tasks/reviews/:id/approve', requireAdmin, checkIdempotency, async 
       };
     }
 
+    // In-app notification for user
+    const notifId = `notif_appr_${taskId}_${now}`;
+    const taskTitle = (taskSnap.exists() && taskSnap.val().title) || taskId;
+    const notifPayload = {
+      id: notifId,
+      title: "Task Approved!",
+      message: `Congratulations! Your submission for '${taskTitle}' was approved. ${reward} coins added to your wallet.`,
+      imageUrl: "",
+      createdAt: now,
+      type: "task_approved",
+      deepLink: "wallet",
+      isRead: false
+    };
+    updates[`notifications/${uid}/${notifId}`] = notifPayload;
+    updates[`notifications/user/${uid}/${notifId}`] = notifPayload;
+
+    // Referrer tracking & 3-task milestone commission
+    const userSnap = await db.ref(`users/${uid}`).get();
+    const userVal = userSnap.val() || {};
+    const referrerUid = (userVal.profile && userVal.profile.referredBy) || userVal.referredBy;
+    const refereeName = (userVal.profile && userVal.profile.name) || userVal.name || "Friend";
+
+    if (referrerUid && referrerUid !== uid) {
+      const refSnap = await db.ref(`referrals/${referrerUid}/${uid}`).get();
+      const refVal = refSnap.val() || {};
+      const currentCount = ((parseInt(refVal.completedOffersCount, 10)) || 0) + 1;
+      const rewardAlreadyGiven = refVal.rewardGiven === true || refVal.status === "completed" || refVal.status === "rewarded";
+
+      updates[`referrals/${referrerUid}/${uid}/completedOffersCount`] = currentCount;
+
+      if (currentCount >= 3 && !rewardAlreadyGiven) {
+        const configSnap = await db.ref("config/app").get();
+        const configVal = configSnap.val() || {};
+        const bonusCoins = parseInt(configVal.referralBonusCoins, 10) || (configVal.signupBonus && parseInt(configVal.signupBonus.coins, 10)) || 500;
+
+        updates[`referrals/${referrerUid}/${uid}/status`] = "rewarded";
+        updates[`referrals/${referrerUid}/${uid}/rewardGiven`] = true;
+        updates[`referrals/${referrerUid}/${uid}/rewardedAt`] = now;
+        updates[`referrals/${referrerUid}/${uid}/completedAt`] = now;
+
+        const cardId = `ref_${uid}`;
+        updates[`scratchCards/${referrerUid}/${cardId}`] = {
+          id: cardId,
+          amount: bonusCoins,
+          coins: bonusCoins,
+          amountRupees: bonusCoins,
+          status: "new",
+          createdAt: now,
+          source: "referral",
+          fromName: refereeName,
+          refereeUid: uid,
+          title: "Referral Reward (3 Offers Completed)"
+        };
+
+        if (bonusCoins > 0) {
+          await db.ref(`wallets/${referrerUid}`).transaction((cur) => {
+            const curCoins = (cur && cur.coins) || 0;
+            const curEarned = (cur && cur.totalEarned) || 0;
+            return { ...cur, coins: curCoins + bonusCoins, totalEarned: curEarned + bonusCoins, updatedAt: now };
+          });
+
+          const refTxId = db.ref(`transactions/${referrerUid}`).push().key;
+          const refTxPayload = {
+            id: refTxId,
+            type: "credit",
+            source: "referral_bonus",
+            amount: bonusCoins,
+            description: `Referral milestone: ${refereeName} completed 3 tasks`,
+            createdAt: now
+          };
+          updates[`transactions/${referrerUid}/${refTxId}`] = refTxPayload;
+          updates[`userLedger/${referrerUid}/${refTxId}`] = refTxPayload;
+          updates[`users/${referrerUid}/earnings/${refTxId}`] = {
+            amount: bonusCoins,
+            source: "referral",
+            timestamp: now
+          };
+        }
+
+        const refNotifId = `notif_ref_${uid}_${now}`;
+        const refNotifPayload = {
+          id: refNotifId,
+          title: "Referral Reward Unlocked!",
+          message: `${refereeName} completed 3 tasks! You received ${bonusCoins} bonus coins.`,
+          imageUrl: "",
+          createdAt: now,
+          type: "referral_reward",
+          deepLink: "wallet",
+          isRead: false
+        };
+        updates[`notifications/${referrerUid}/${refNotifId}`] = refNotifPayload;
+        updates[`notifications/user/${referrerUid}/${refNotifId}`] = refNotifPayload;
+      }
+    }
+
     await db.ref().update(updates);
     const responseBody = { success: true, id, status: "approved", reward };
     await saveIdempotency(req.requestId, 200, responseBody);
@@ -445,17 +540,35 @@ app.post('/v1/tasks/reviews/:id/reject', requireAdmin, checkIdempotency, async (
     const uid = r.uid;
     const taskId = r.taskId;
     const now = Date.now();
+    const cleanReason = reason || "Submission did not satisfy requirements.";
+
+    const taskSnap = await db.ref(`tasks/${taskId}`).get();
+    const taskTitle = (taskSnap.exists() && taskSnap.val().title) || taskId;
+
+    const notifId = `notif_rej_${taskId}_${now}`;
+    const notifPayload = {
+      id: notifId,
+      title: "Task Submission Rejected",
+      message: `Your submission for '${taskTitle}' was rejected: ${cleanReason}`,
+      imageUrl: "",
+      createdAt: now,
+      type: "task_rejected",
+      deepLink: "tasks",
+      isRead: false
+    };
 
     const updates = {};
     updates[`reviewQueue/${id}/status`] = "rejected";
-    updates[`reviewQueue/${id}/rejectionReason`] = reason || "Proof rejected";
+    updates[`reviewQueue/${id}/rejectionReason`] = cleanReason;
     updates[`reviewQueue/${id}/reviewedBy`] = adminUid;
     updates[`reviewQueue/${id}/reviewedAt`] = now;
 
     updates[`userTasks/${uid}/${taskId}/status`] = "rejected";
-    updates[`userTasks/${uid}/${taskId}/rejectionReason`] = reason || "Proof rejected";
+    updates[`userTasks/${uid}/${taskId}/rejectionReason`] = cleanReason;
     updates[`userTasks/${uid}/${taskId}/reviewedBy`] = adminUid;
     updates[`userTasks/${uid}/${taskId}/reviewedAt`] = now;
+    updates[`notifications/${uid}/${notifId}`] = notifPayload;
+    updates[`notifications/user/${uid}/${notifId}`] = notifPayload;
 
     await db.ref().update(updates);
     const responseBody = { success: true, id, status: "rejected" };

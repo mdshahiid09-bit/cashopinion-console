@@ -4,13 +4,18 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import coil.compose.AsyncImage
 import com.cashopinion.console.R
 import com.cashopinion.console.data.model.BannerItem
 import com.cashopinion.console.data.model.NotificationItem
@@ -54,9 +59,12 @@ fun NotificationsScreen(
     var isSavingPopup by remember { mutableStateOf(false) }
 
     var showBannerDialog by remember { mutableStateOf(false) }
+    var editingBannerId by remember { mutableStateOf<String?>(null) }
+    var bannerTitle by remember { mutableStateOf("") }
     var bannerImageUrl by remember { mutableStateOf("") }
     var bannerLinkUrl by remember { mutableStateOf("") }
     var bannerOrder by remember { mutableStateOf("1") }
+    var bannerActive by remember { mutableStateOf(true) }
     var isSavingBanner by remember { mutableStateOf(false) }
 
     Column(
@@ -236,7 +244,15 @@ fun NotificationsScreen(
                     ) {
                         GoldPillButton(
                             text = "Add Promotional Banner",
-                            onClick = { showBannerDialog = true },
+                            onClick = {
+                                editingBannerId = null
+                                bannerTitle = ""
+                                bannerImageUrl = ""
+                                bannerLinkUrl = ""
+                                bannerOrder = (banners.maxOfOrNull { it.order }?.plus(1) ?: 1).toString()
+                                bannerActive = true
+                                showBannerDialog = true
+                            },
                             iconRes = R.drawable.ic_link,
                             modifier = Modifier.fillMaxWidth()
                         )
@@ -258,35 +274,131 @@ fun NotificationsScreen(
                                             horizontalArrangement = Arrangement.SpaceBetween,
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {
-                                            Text(
-                                                text = "Order: #${banner.order}",
-                                                style = MaterialTheme.typography.titleMedium,
-                                                fontWeight = FontWeight.Bold,
-                                                color = colors.primary
-                                            )
-                                            Switch(
-                                                checked = banner.active,
-                                                onCheckedChange = { active ->
-                                                    scope.launch {
-                                                        consoleRepo.saveBanner(banner.copy(active = active))
-                                                        SoundFx.playClick()
-                                                    }
+                                            Row(
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Surface(
+                                                    color = colors.primary.copy(alpha = 0.15f),
+                                                    shape = RoundedCornerShape(6.dp)
+                                                ) {
+                                                    Text(
+                                                        text = "#${banner.order}",
+                                                        style = MaterialTheme.typography.labelMedium,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = colors.primary,
+                                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                                    )
                                                 }
+                                                Text(
+                                                    text = banner.title.ifBlank { "Promotional Banner #${banner.order}" },
+                                                    style = MaterialTheme.typography.titleMedium,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = colors.textPrimary,
+                                                    maxLines = 1
+                                                )
+                                            }
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                            ) {
+                                                Text(
+                                                    text = if (banner.active) "Active" else "Inactive",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = if (banner.active) colors.primary else colors.textSecondary
+                                                )
+                                                Switch(
+                                                    checked = banner.active,
+                                                    onCheckedChange = { active ->
+                                                        scope.launch {
+                                                            consoleRepo.saveBanner(banner.copy(active = active))
+                                                            SoundFx.playClick()
+                                                        }
+                                                    }
+                                                )
+                                            }
+                                        }
+
+                                        Spacer(modifier = Modifier.height(10.dp))
+
+                                        if (banner.imageUrl.isNotBlank()) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .height(115.dp)
+                                                    .clip(RoundedCornerShape(8.dp))
+                                                    .background(colors.surfaceVariant)
+                                            ) {
+                                                AsyncImage(
+                                                    model = banner.imageUrl,
+                                                    contentDescription = "Promotional Banner",
+                                                    modifier = Modifier.fillMaxSize(),
+                                                    contentScale = ContentScale.Crop
+                                                )
+                                            }
+                                            Spacer(modifier = Modifier.height(8.dp))
+                                        }
+
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                        ) {
+                                            Icon(
+                                                painter = painterResource(id = R.drawable.ic_document),
+                                                contentDescription = null,
+                                                tint = colors.textSecondary,
+                                                modifier = Modifier.size(14.dp)
+                                            )
+                                            Text(
+                                                text = banner.imageUrl.ifBlank { "No image URL" },
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = colors.textSecondary,
+                                                maxLines = 1
                                             )
                                         }
-                                        Text(
-                                            text = "Image: ${banner.imageUrl}",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = colors.textSecondary,
-                                            maxLines = 1
-                                        )
-                                        Text(
-                                            text = "Target Link: ${banner.linkUrl}",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = colors.textSecondary,
-                                            maxLines = 1
-                                        )
-                                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+
+                                        if (banner.linkUrl.isNotBlank()) {
+                                            Spacer(modifier = Modifier.height(4.dp))
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                            ) {
+                                                Icon(
+                                                    painter = painterResource(id = R.drawable.ic_link),
+                                                    contentDescription = null,
+                                                    tint = colors.primary,
+                                                    modifier = Modifier.size(14.dp)
+                                                )
+                                                Text(
+                                                    text = banner.linkUrl,
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = colors.primary,
+                                                    maxLines = 1
+                                                )
+                                            }
+                                        }
+
+                                        Spacer(modifier = Modifier.height(8.dp))
+
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.End,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            TextButton(
+                                                onClick = {
+                                                    editingBannerId = banner.id
+                                                    bannerTitle = banner.title
+                                                    bannerImageUrl = banner.imageUrl
+                                                    bannerLinkUrl = banner.linkUrl
+                                                    bannerOrder = banner.order.toString()
+                                                    bannerActive = banner.active
+                                                    showBannerDialog = true
+                                                }
+                                            ) {
+                                                Text("Edit", color = colors.primary)
+                                            }
+                                            Spacer(modifier = Modifier.width(8.dp))
                                             TextButton(
                                                 onClick = {
                                                     scope.launch {
@@ -457,9 +569,22 @@ fun NotificationsScreen(
     if (showBannerDialog) {
         AlertDialog(
             onDismissRequest = { showBannerDialog = false },
-            title = { Text("Add Promotional Banner", color = colors.primary, fontWeight = FontWeight.Bold) },
+            title = {
+                Text(
+                    text = if (editingBannerId != null) "Edit Promotional Banner" else "Add Promotional Banner",
+                    color = colors.primary,
+                    fontWeight = FontWeight.Bold
+                )
+            },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    OutlinedTextField(
+                        value = bannerTitle,
+                        onValueChange = { bannerTitle = it },
+                        label = { Text("Banner Title (Optional)") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
                     OutlinedTextField(
                         value = bannerImageUrl,
                         onValueChange = { bannerImageUrl = it },
@@ -470,7 +595,7 @@ fun NotificationsScreen(
                     OutlinedTextField(
                         value = bannerLinkUrl,
                         onValueChange = { bannerLinkUrl = it },
-                        label = { Text("Target Link URL") },
+                        label = { Text("Target Link URL (Optional)") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -481,6 +606,28 @@ fun NotificationsScreen(
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
+
+                    if (bannerImageUrl.isNotBlank()) {
+                        Text(
+                            text = "Live Banner Preview:",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = colors.textSecondary
+                        )
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(100.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(colors.surfaceVariant)
+                        ) {
+                            AsyncImage(
+                                model = bannerImageUrl.trim(),
+                                contentDescription = "Banner Preview",
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Crop
+                            )
+                        }
+                    }
                 }
             },
             confirmButton = {
@@ -490,10 +637,12 @@ fun NotificationsScreen(
                             isSavingBanner = true
                             scope.launch {
                                 val item = BannerItem(
+                                    id = editingBannerId.orEmpty(),
+                                    title = bannerTitle.trim(),
                                     imageUrl = bannerImageUrl.trim(),
                                     linkUrl = bannerLinkUrl.trim(),
                                     order = bannerOrder.toIntOrNull() ?: 1,
-                                    active = true
+                                    active = bannerActive
                                 )
                                 consoleRepo.saveBanner(item)
                                 SoundFx.playSuccess()
@@ -505,7 +654,10 @@ fun NotificationsScreen(
                     enabled = bannerImageUrl.isNotBlank() && !isSavingBanner,
                     colors = ButtonDefaults.buttonColors(containerColor = colors.primary)
                 ) {
-                    Text(if (isSavingBanner) "Adding..." else "Save Banner", color = Color(0xFF140E00))
+                    Text(
+                        text = if (isSavingBanner) "Saving..." else if (editingBannerId != null) "Update Banner" else "Save Banner",
+                        color = Color(0xFF140E00)
+                    )
                 }
             },
             dismissButton = {

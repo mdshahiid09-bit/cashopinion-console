@@ -151,6 +151,7 @@ data class PopupItem(
 @Keep
 data class BannerItem(
     val id: String = "",
+    val title: String = "",
     val imageUrl: String = "",
     val linkUrl: String = "",
     val order: Int = 0,

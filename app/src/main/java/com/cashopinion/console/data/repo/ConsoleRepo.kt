@@ -954,9 +954,9 @@ class ConsoleRepo(
 
     suspend fun approveReview(review: ReviewItem): Result<Unit> {
         return try {
-            val sResult = serverClient.approveReview(review.id)
-            if (sResult.isSuccess) {
-                return Result.success(Unit)
+            try {
+                serverClient.approveReview(review.id)
+            } catch (_: Exception) {
             }
 
             val now = System.currentTimeMillis()
@@ -970,6 +970,18 @@ class ConsoleRepo(
                 taskSnap.child("title").value?.toString() ?: review.taskId
             }
 
+            val notifId = "notif_appr_${review.taskId}_$now"
+            val notifPayload = mapOf(
+                "id" to notifId,
+                "title" to "Task Approved!",
+                "message" to "Congratulations! Your submission for '$taskTitle' was approved. $reward coins added to your wallet.",
+                "imageUrl" to "",
+                "createdAt" to now,
+                "type" to "task_approved",
+                "deepLink" to "wallet",
+                "isRead" to false
+            )
+
             val updates = hashMapOf<String, Any>(
                 "${Constants.NODE_REVIEW_QUEUE}/${review.id}/status" to "approved",
                 "${Constants.NODE_REVIEW_QUEUE}/${review.id}/reviewedBy" to adminUid,
@@ -977,7 +989,9 @@ class ConsoleRepo(
                 "${Constants.NODE_USER_TASKS}/${review.uid}/${review.taskId}/status" to "approved",
                 "${Constants.NODE_USER_TASKS}/${review.uid}/${review.taskId}/coinsAwarded" to reward,
                 "${Constants.NODE_USER_TASKS}/${review.uid}/${review.taskId}/reviewedBy" to adminUid,
-                "${Constants.NODE_USER_TASKS}/${review.uid}/${review.taskId}/reviewedAt" to now
+                "${Constants.NODE_USER_TASKS}/${review.uid}/${review.taskId}/reviewedAt" to now,
+                "${Constants.NODE_NOTIFICATIONS}/${review.uid}/$notifId" to notifPayload,
+                "${Constants.NODE_NOTIFICATIONS}/user/${review.uid}/$notifId" to notifPayload
             )
 
             if (reward > 0L) {
@@ -1001,6 +1015,92 @@ class ConsoleRepo(
                 )
                 database.getReference(Constants.NODE_WALLETS).child(review.uid).child("coins")
                     .setValue(com.google.firebase.database.ServerValue.increment(reward)).await()
+                database.getReference(Constants.NODE_WALLETS).child(review.uid).child("totalEarned")
+                    .setValue(com.google.firebase.database.ServerValue.increment(reward)).await()
+            }
+
+            // Referral commission tracking: check if user was referred by someone
+            val userSnap = database.getReference(Constants.NODE_USERS).child(review.uid).get().await()
+            val referrerUid = userSnap.child("profile").child("referredBy").value?.toString()
+                ?: userSnap.child("referredBy").value?.toString()
+            val refereeName = userSnap.child("profile").child("name").value?.toString()
+                ?: userSnap.child("name").value?.toString().orEmpty()
+
+            if (!referrerUid.isNullOrBlank() && referrerUid != review.uid) {
+                val refNode = database.getReference(Constants.NODE_REFERRALS).child(referrerUid).child(review.uid)
+                val refSnap = refNode.get().await()
+                val currentCount = (refSnap.child("completedOffersCount").value?.toString()?.toIntOrNull() ?: 0) + 1
+                val statusVal = refSnap.child("status").value?.toString().orEmpty()
+                val rewardAlreadyGiven = refSnap.child("rewardGiven").value as? Boolean ?: (statusVal == "completed" || statusVal == "rewarded")
+
+                updates["${Constants.NODE_REFERRALS}/$referrerUid/${review.uid}/completedOffersCount"] = currentCount
+
+                if (currentCount >= 3 && !rewardAlreadyGiven) {
+                    val configSnap = database.getReference(Constants.NODE_CONFIG_APP).get().await()
+                    val bonusCoins = (configSnap.child("referralBonusCoins").value?.toString()?.toLongOrNull())
+                        ?: (configSnap.child("signupBonus").child("coins").value?.toString()?.toLongOrNull())
+                        ?: 500L
+
+                    updates["${Constants.NODE_REFERRALS}/$referrerUid/${review.uid}/status"] = "rewarded"
+                    updates["${Constants.NODE_REFERRALS}/$referrerUid/${review.uid}/rewardGiven"] = true
+                    updates["${Constants.NODE_REFERRALS}/$referrerUid/${review.uid}/rewardedAt"] = now
+                    updates["${Constants.NODE_REFERRALS}/$referrerUid/${review.uid}/completedAt"] = now
+
+                    // Create scratch card for user app compatibility
+                    val cardId = "ref_${review.uid}"
+                    val cardPayload = mapOf(
+                        "id" to cardId,
+                        "amount" to bonusCoins,
+                        "coins" to bonusCoins,
+                        "amountRupees" to bonusCoins,
+                        "status" to "new",
+                        "createdAt" to now,
+                        "source" to "referral",
+                        "fromName" to refereeName.ifBlank { "Referred Friend" },
+                        "refereeUid" to review.uid,
+                        "title" to "Referral Reward (3 Offers Completed)"
+                    )
+                    updates["${Constants.NODE_SCRATCH_CARDS}/$referrerUid/$cardId"] = cardPayload
+
+                    if (bonusCoins > 0L) {
+                        database.getReference(Constants.NODE_WALLETS).child(referrerUid).child("coins")
+                            .setValue(com.google.firebase.database.ServerValue.increment(bonusCoins)).await()
+                        database.getReference(Constants.NODE_WALLETS).child(referrerUid).child("totalEarned")
+                            .setValue(com.google.firebase.database.ServerValue.increment(bonusCoins)).await()
+
+                        val refTxRef = database.getReference(Constants.NODE_TRANSACTIONS).child(referrerUid).push()
+                        val refTxId = refTxRef.key ?: UUID.randomUUID().toString()
+                        val refTxPayload = mapOf(
+                            "id" to refTxId,
+                            "type" to "credit",
+                            "source" to "referral_bonus",
+                            "amount" to bonusCoins,
+                            "description" to "Referral milestone: ${refereeName.ifBlank { "Friend" }} completed 3 tasks",
+                            "createdAt" to now
+                        )
+                        updates["${Constants.NODE_TRANSACTIONS}/$referrerUid/$refTxId"] = refTxPayload
+                        updates["${Constants.NODE_USER_LEDGER}/$referrerUid/$refTxId"] = refTxPayload
+                        updates["${Constants.NODE_USERS}/$referrerUid/earnings/$refTxId"] = mapOf(
+                            "amount" to bonusCoins,
+                            "source" to "referral",
+                            "timestamp" to now
+                        )
+                    }
+
+                    val refNotifId = "notif_ref_${review.uid}_$now"
+                    val refNotifPayload = mapOf(
+                        "id" to refNotifId,
+                        "title" to "Referral Reward Unlocked!",
+                        "message" to "${refereeName.ifBlank { "Your friend" }} completed 3 tasks! You received $bonusCoins bonus coins.",
+                        "imageUrl" to "",
+                        "createdAt" to now,
+                        "type" to "referral_reward",
+                        "deepLink" to "wallet",
+                        "isRead" to false
+                    )
+                    updates["${Constants.NODE_NOTIFICATIONS}/$referrerUid/$refNotifId"] = refNotifPayload
+                    updates["${Constants.NODE_NOTIFICATIONS}/user/$referrerUid/$refNotifId"] = refNotifPayload
+                }
             }
 
             database.reference.updateChildren(updates).await()
@@ -1026,22 +1126,42 @@ class ConsoleRepo(
 
     suspend fun rejectReview(review: ReviewItem, reason: String): Result<Unit> {
         return try {
-            val sResult = serverClient.rejectReview(review.id, reason)
-            if (sResult.isSuccess) {
-                return Result.success(Unit)
+            try {
+                serverClient.rejectReview(review.id, reason)
+            } catch (_: Exception) {
             }
 
             val now = System.currentTimeMillis()
             val adminUid = auth.currentUser?.uid.orEmpty()
+            val taskSnap = database.getReference(Constants.NODE_TASKS).child(review.taskId).get().await()
+            val taskTitle = review.taskTitle.ifBlank {
+                taskSnap.child("title").value?.toString() ?: review.taskId
+            }
+            val cleanReason = reason.trim().ifBlank { "Submission did not satisfy requirements." }
+
+            val notifId = "notif_rej_${review.taskId}_$now"
+            val notifPayload = mapOf(
+                "id" to notifId,
+                "title" to "Task Submission Rejected",
+                "message" to "Your submission for '$taskTitle' was rejected: $cleanReason",
+                "imageUrl" to "",
+                "createdAt" to now,
+                "type" to "task_rejected",
+                "deepLink" to "tasks",
+                "isRead" to false
+            )
+
             val updates = hashMapOf<String, Any>(
                 "${Constants.NODE_REVIEW_QUEUE}/${review.id}/status" to "rejected",
-                "${Constants.NODE_REVIEW_QUEUE}/${review.id}/rejectionReason" to reason.trim(),
+                "${Constants.NODE_REVIEW_QUEUE}/${review.id}/rejectionReason" to cleanReason,
                 "${Constants.NODE_REVIEW_QUEUE}/${review.id}/reviewedBy" to adminUid,
                 "${Constants.NODE_REVIEW_QUEUE}/${review.id}/reviewedAt" to now,
                 "${Constants.NODE_USER_TASKS}/${review.uid}/${review.taskId}/status" to "rejected",
-                "${Constants.NODE_USER_TASKS}/${review.uid}/${review.taskId}/rejectionReason" to reason.trim(),
+                "${Constants.NODE_USER_TASKS}/${review.uid}/${review.taskId}/rejectionReason" to cleanReason,
                 "${Constants.NODE_USER_TASKS}/${review.uid}/${review.taskId}/reviewedBy" to adminUid,
-                "${Constants.NODE_USER_TASKS}/${review.uid}/${review.taskId}/reviewedAt" to now
+                "${Constants.NODE_USER_TASKS}/${review.uid}/${review.taskId}/reviewedAt" to now,
+                "${Constants.NODE_NOTIFICATIONS}/${review.uid}/$notifId" to notifPayload,
+                "${Constants.NODE_NOTIFICATIONS}/user/${review.uid}/$notifId" to notifPayload
             )
             database.reference.updateChildren(updates).await()
 
@@ -1051,13 +1171,17 @@ class ConsoleRepo(
                     "reviewId" to review.id,
                     "uid" to review.uid,
                     "taskId" to review.taskId,
-                    "reason" to reason.trim(),
+                    "reason" to cleanReason,
                     "adminUid" to adminUid,
                     "timestamp" to now
                 )
             ).await()
 
             Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -1338,13 +1462,23 @@ class ConsoleRepo(
             override fun onDataChange(snapshot: DataSnapshot) {
                 val list = mutableListOf<BannerItem>()
                 for (child in snapshot.children) {
+                    val id = child.key.orEmpty()
+                    val title = child.child("title").value?.toString().orEmpty()
+                    val imageUrl = child.child("imageUrl").value?.toString().takeIf { !it.isNullOrBlank() }
+                        ?: child.child("url").value?.toString().orEmpty()
+                    val linkUrl = child.child("linkUrl").value?.toString().takeIf { !it.isNullOrBlank() }
+                        ?: child.child("link").value?.toString()
+                        ?: child.child("actionUrl").value?.toString().orEmpty()
+                    val order = child.child("order").value?.toString()?.toIntOrNull() ?: 0
+                    val active = child.child("active").value as? Boolean ?: true
                     list.add(
                         BannerItem(
-                            id = child.key.orEmpty(),
-                            imageUrl = child.child("imageUrl").value?.toString().orEmpty(),
-                            linkUrl = child.child("linkUrl").value?.toString().orEmpty(),
-                            order = child.child("order").value?.toString()?.toIntOrNull() ?: 0,
-                            active = child.child("active").value as? Boolean ?: true
+                            id = id,
+                            title = title,
+                            imageUrl = imageUrl,
+                            linkUrl = linkUrl,
+                            order = order,
+                            active = active
                         )
                     )
                 }
@@ -1362,13 +1496,35 @@ class ConsoleRepo(
         return try {
             val ref = if (item.id.isBlank()) database.getReference(Constants.NODE_BANNERS).push()
             else database.getReference(Constants.NODE_BANNERS).child(item.id)
-            val payload = mapOf(
-                "imageUrl" to item.imageUrl,
-                "linkUrl" to item.linkUrl,
+            val bannerId = ref.key ?: UUID.randomUUID().toString()
+            val now = System.currentTimeMillis()
+            val payload = hashMapOf<String, Any>(
+                "id" to bannerId,
+                "title" to item.title.trim(),
+                "imageUrl" to item.imageUrl.trim(),
+                "url" to item.imageUrl.trim(),
+                "linkUrl" to item.linkUrl.trim(),
+                "link" to item.linkUrl.trim(),
+                "actionUrl" to item.linkUrl.trim(),
                 "order" to item.order,
-                "active" to item.active
+                "active" to item.active,
+                "updatedAt" to now
             )
-            ref.setValue(payload).await()
+            ref.updateChildren(payload).await()
+
+            val adminUid = auth.currentUser?.uid.orEmpty()
+            database.getReference("adminAudit").push().setValue(
+                mapOf(
+                    "action" to "banner_saved",
+                    "bannerId" to bannerId,
+                    "title" to item.title.trim(),
+                    "order" to item.order,
+                    "active" to item.active,
+                    "adminUid" to adminUid,
+                    "timestamp" to now
+                )
+            ).await()
+
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
@@ -1378,6 +1534,15 @@ class ConsoleRepo(
     suspend fun deleteBanner(id: String): Result<Unit> {
         return try {
             database.getReference(Constants.NODE_BANNERS).child(id).removeValue().await()
+            val adminUid = auth.currentUser?.uid.orEmpty()
+            database.getReference("adminAudit").push().setValue(
+                mapOf(
+                    "action" to "banner_deleted",
+                    "bannerId" to id,
+                    "adminUid" to adminUid,
+                    "timestamp" to System.currentTimeMillis()
+                )
+            ).await()
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
