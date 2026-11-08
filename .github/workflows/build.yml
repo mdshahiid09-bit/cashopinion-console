@@ -55,13 +55,6 @@ jobs:
           set -o pipefail
           ./gradlew assembleRelease --stacktrace 2>&1 | tee gradle_build.log
 
-      - name: Upload Build Log on Failure
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: gradle-build-log
-          path: gradle_build.log
-
       - name: Determine Version and Create Release
         if: success()
         env:
@@ -93,10 +86,3 @@ jobs:
             --title "Cash Opinion Console $RELEASE_TAG" \
             --notes-file release_notes.md \
             --latest || gh release upload "$RELEASE_TAG" "$TARGET_APK" --clobber
-
-      - name: Upload Release APK Artifact
-        if: success()
-        uses: actions/upload-artifact@v4
-        with:
-          name: release-apk
-          path: app/build/outputs/apk/release/app-release.apk

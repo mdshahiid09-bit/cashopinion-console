@@ -1,10 +1,6 @@
 package com.cashopinion.console.ui.components
 
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -190,7 +186,7 @@ fun ShimmerCard(
 ) {
     val colors = CashTheme.colors
     val transition = rememberInfiniteTransition(label = "shimmer")
-    val translateAnim by transition.animateFloat(
+    val translateAnim = transition.animateFloat(
         initialValue = 0f,
         targetValue = 1000f,
         animationSpec = infiniteRepeatable(
@@ -208,8 +204,8 @@ fun ShimmerCard(
 
     val brush = Brush.linearGradient(
         colors = shimmerColors,
-        start = Offset(x = translateAnim - 500f, y = translateAnim - 500f),
-        end = Offset(x = translateAnim, y = translateAnim)
+        start = Offset(x = translateAnim.value - 500f, y = translateAnim.value - 500f),
+        end = Offset(x = translateAnim.value, y = translateAnim.value)
     )
 
     Box(
