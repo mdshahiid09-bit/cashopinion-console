@@ -200,14 +200,14 @@ class ConsoleRepo(
                 val profileSnap = userChild?.child("profile")
 
                 val directName = child.child("name").value?.toString()
-                val joinedName = profileSnap?.child("name").value?.toString()
-                    ?: userChild?.child("name").value?.toString()
-                    ?: userChild?.child("displayName").value?.toString()
+                val joinedName = profileSnap?.child("name")?.value?.toString()
+                    ?: userChild?.child("name")?.value?.toString()
+                    ?: userChild?.child("displayName")?.value?.toString()
                 val userName = directName?.takeIf { it.isNotBlank() } ?: joinedName ?: ""
 
                 val directEmail = child.child("email").value?.toString()
-                val joinedEmail = profileSnap?.child("email").value?.toString()
-                    ?: userChild?.child("email").value?.toString()
+                val joinedEmail = profileSnap?.child("email")?.value?.toString()
+                    ?: userChild?.child("email")?.value?.toString()
                 val userEmail = directEmail?.takeIf { it.isNotBlank() } ?: joinedEmail ?: ""
 
                 val method = child.child("method").value?.toString() ?: "upi"
@@ -390,9 +390,9 @@ class ConsoleRepo(
             for (child in uSnap.children) {
                 val uid = child.key.orEmpty()
                 val wItem = wSnap?.child(uid)
-                val coins = wItem?.child("coins").value?.toString()?.toLongOrNull() ?: 0L
-                val withdrawn = wItem?.child("totalWithdrawn").value?.toString()?.toLongOrNull() ?: 0L
-                val pendingWId = wItem?.child("pendingWithdrawalId").value?.toString()
+                val coins = wItem?.child("coins")?.value?.toString()?.toLongOrNull() ?: 0L
+                val withdrawn = wItem?.child("totalWithdrawn")?.value?.toString()?.toLongOrNull() ?: 0L
+                val pendingWId = wItem?.child("pendingWithdrawalId")?.value?.toString()
 
                 val profileSnap = child.child("profile")
                 val name = profileSnap.child("name").value?.toString()
