@@ -705,16 +705,27 @@ class ConsoleRepo(
                     val stepsList = mutableListOf<String>()
                     val stepsSnap = child.child("steps")
                     if (stepsSnap.exists()) {
-                        for (s in stepsSnap.children) {
-                            val v = s.value?.toString().orEmpty()
-                            if (v.isNotBlank()) stepsList.add(v)
+                        val rawStepsVal = stepsSnap.value
+                        if (rawStepsVal is String && rawStepsVal.isNotBlank()) {
+                            stepsList.addAll(rawStepsVal.lines().map { it.trim() }.filter { it.isNotBlank() })
+                        } else {
+                            for (s in stepsSnap.children) {
+                                val sText = s.child("text").value?.toString()
+                                    ?: s.child("title").value?.toString()
+                                    ?: s.value?.takeIf { it !is Map<*, *> }?.toString()
+                                if (!sText.isNullOrBlank()) {
+                                    stepsList.add(sText.trim())
+                                }
+                            }
                         }
                     }
                     if (stepsList.isEmpty()) {
                         val inst = child.child("instructions").value?.toString()
-                            ?: child.child("userInstructions").value?.toString().orEmpty()
+                            ?: child.child("userInstructions").value?.toString()
+                            ?: child.child("taskInstructions").value?.toString()
+                            ?: child.child("instruction").value?.toString().orEmpty()
                         if (inst.isNotBlank()) {
-                            stepsList.addAll(inst.lines().filter { it.isNotBlank() })
+                            stepsList.addAll(inst.lines().map { it.trim() }.filter { it.isNotBlank() })
                         }
                     }
 
@@ -781,6 +792,16 @@ class ConsoleRepo(
             }
             val id = ref.key ?: return Result.failure(Exception("Failed to generate task ID"))
             val now = System.currentTimeMillis()
+            val validSteps = task.steps.map { it.trim() }.filter { it.isNotBlank() }
+            val stepsMultiline = validSteps.joinToString("\n")
+            val structuredSteps = validSteps.mapIndexed { index, stepText ->
+                mapOf(
+                    "title" to "Step ${index + 1}",
+                    "text" to stepText,
+                    "order" to (index + 1),
+                    "enabled" to true
+                )
+            }
             val payload = hashMapOf<String, Any>(
                 "taskId" to id,
                 "title" to task.title.trim(),
@@ -797,7 +818,12 @@ class ConsoleRepo(
                 "link" to task.link.trim(),
                 "playStoreLink" to task.link.trim(),
                 "actionUrl" to task.link.trim(),
-                "steps" to task.steps,
+                "steps" to structuredSteps,
+                "taskSteps" to structuredSteps,
+                "instructions" to stepsMultiline,
+                "userInstructions" to stepsMultiline,
+                "taskInstructions" to stepsMultiline,
+                "instruction" to stepsMultiline,
                 "reward" to task.reward,
                 "rewardCoins" to task.reward,
                 "prizeCoins" to task.reward,
