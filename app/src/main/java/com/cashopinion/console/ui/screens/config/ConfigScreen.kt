@@ -13,6 +13,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.cashopinion.console.R
 import com.cashopinion.console.core.Constants
+import com.cashopinion.console.data.model.SignupBonusConfig
 import com.cashopinion.console.data.repo.ConsoleRepo
 import com.cashopinion.console.ui.theme.CashTheme
 import com.cashopinion.console.ui.theme.Shapes
@@ -36,6 +37,20 @@ fun ConfigScreen(
     var minVersionCode by remember { mutableStateOf("138") }
     var isForceUpdate by remember { mutableStateOf(false) }
     var updateUrl by remember { mutableStateOf("https://github.com/mdshahiid09-bit/cashopinion/releases/latest") }
+
+    // Signup Bonus states (Live stream)
+    val bonusFlow = remember(consoleRepo) { consoleRepo.observeSignupBonusConfig() }
+    val liveBonusConfig by bonusFlow.collectAsState(initial = SignupBonusConfig())
+
+    var isSignupBonusEnabled by remember { mutableStateOf(true) }
+    var signupCoinsWithCode by remember { mutableStateOf("200") }
+    var signupCoinsNoCode by remember { mutableStateOf("50") }
+
+    LaunchedEffect(liveBonusConfig) {
+        isSignupBonusEnabled = liveBonusConfig.enabled
+        signupCoinsWithCode = liveBonusConfig.coins.toString()
+        signupCoinsNoCode = liveBonusConfig.noCodeCoins.toString()
+    }
 
     var statusMessage by remember { mutableStateOf<String?>(null) }
     var isSaving by remember { mutableStateOf(false) }
@@ -74,7 +89,61 @@ fun ConfigScreen(
             fontWeight = FontWeight.Bold
         )
 
-        // Maintenance Card
+        // 1. Signup Bonus Management Card
+        Card(
+            shape = Shapes.Card,
+            colors = CardDefaults.cardColors(containerColor = colors.surface),
+            border = androidx.compose.foundation.BorderStroke(1.dp, colors.border),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Signup Bonus Management",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = colors.textPrimary
+                        )
+                        Text(
+                            text = "Manage welcome coins awarded on new user registration",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = colors.textSecondary
+                        )
+                    }
+                    Switch(
+                        checked = isSignupBonusEnabled,
+                        onCheckedChange = { isSignupBonusEnabled = it }
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                OutlinedTextField(
+                    value = signupCoinsWithCode,
+                    onValueChange = { signupCoinsWithCode = it.filter { ch -> ch.isDigit() } },
+                    label = { Text("Referral Signup Bonus (Coins with Code)") },
+                    supportingText = { Text("Awarded when registering with an invite referral code") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                OutlinedTextField(
+                    value = signupCoinsNoCode,
+                    onValueChange = { signupCoinsNoCode = it.filter { ch -> ch.isDigit() } },
+                    label = { Text("Direct Signup Bonus (Coins without Code)") },
+                    supportingText = { Text("Awarded when registering directly without referral code") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        }
+
+        // 2. Maintenance Card
         Card(
             shape = Shapes.Card,
             colors = CardDefaults.cardColors(containerColor = colors.surface),
@@ -111,7 +180,7 @@ fun ConfigScreen(
             }
         }
 
-        // App Update Card
+        // 3. App Update Card
         Card(
             shape = Shapes.Card,
             colors = CardDefaults.cardColors(containerColor = colors.surface),
@@ -183,7 +252,17 @@ fun ConfigScreen(
                             "update/updateUrl" to updateUrl
                         )
                         db.getReference(Constants.NODE_CONFIG_APP).updateChildren(updates).await()
-                        statusMessage = "Configuration saved live!"
+
+                        // Save Signup Bonus config
+                        consoleRepo.updateSignupBonusConfig(
+                            SignupBonusConfig(
+                                enabled = isSignupBonusEnabled,
+                                coins = signupCoinsWithCode.toLongOrNull() ?: 200L,
+                                noCodeCoins = signupCoinsNoCode.toLongOrNull() ?: 50L
+                            )
+                        )
+
+                        statusMessage = "All configurations and Signup Bonus settings saved live!"
                     } catch (e: Exception) {
                         statusMessage = "Error: ${e.message}"
                     }

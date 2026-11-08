@@ -10,6 +10,7 @@ import com.google.firebase.database.ValueEventListener
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.tasks.await
 import java.util.UUID
 
@@ -372,7 +373,7 @@ class ConsoleRepo(
             usersRef.removeEventListener(uListener)
             pmRef.removeEventListener(pmListener)
         }
-    }
+    }.distinctUntilChanged()
 
     // 4. Observe Users List (Live Joined with Wallets and Profiles)
     fun observeUsers(): Flow<List<UserItem>> = callbackFlow {
@@ -384,7 +385,11 @@ class ConsoleRepo(
 
         fun emitJoined() {
             val uSnap = lastUsersSnap ?: return
-            val wSnap = lastWalletsSnap
+            if (!uSnap.hasChildren()) {
+                trySend(emptyList())
+                return
+            }
+            val wSnap = lastWalletsSnap ?: return
 
             val list = mutableListOf<UserItem>()
             for (child in uSnap.children) {
@@ -492,6 +497,103 @@ class ConsoleRepo(
         awaitClose {
             usersRef.removeEventListener(uListener)
             walletsRef.removeEventListener(wListener)
+        }
+    }.distinctUntilChanged()
+
+    // 4.1 Signup Bonus Management
+    fun observeSignupBonusConfig(): Flow<SignupBonusConfig> = callbackFlow {
+        val ref = database.getReference(Constants.NODE_CONFIG_APP).child("signupBonus")
+        val listener = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                val enabled = snapshot.child("enabled").value as? Boolean ?: true
+                val coins = snapshot.child("coins").value?.toString()?.toLongOrNull() ?: 200L
+                val noCodeCoins = snapshot.child("noCodeCoins").value?.toString()?.toLongOrNull() ?: 50L
+                trySend(SignupBonusConfig(enabled = enabled, coins = coins, noCodeCoins = noCodeCoins))
+            }
+            override fun onCancelled(error: DatabaseError) {
+                trySend(SignupBonusConfig())
+            }
+        }
+        ref.addValueEventListener(listener)
+        awaitClose { ref.removeEventListener(listener) }
+    }.distinctUntilChanged()
+
+    suspend fun updateSignupBonusConfig(config: SignupBonusConfig): Result<Unit> {
+        return try {
+            val updates = hashMapOf<String, Any>(
+                "${Constants.NODE_CONFIG_APP}/signupBonus/enabled" to config.enabled,
+                "${Constants.NODE_CONFIG_APP}/signupBonus/coins" to config.coins,
+                "${Constants.NODE_CONFIG_APP}/signupBonus/noCodeCoins" to config.noCodeCoins,
+                "${Constants.NODE_CONFIG_APP}/referralBonusCoins" to config.coins
+            )
+            database.reference.updateChildren(updates).await()
+
+            val adminUid = auth.currentUser?.uid.orEmpty()
+            database.getReference("adminAudit").push().setValue(
+                mapOf(
+                    "action" to "signup_bonus_updated",
+                    "enabled" to config.enabled,
+                    "coins" to config.coins,
+                    "noCodeCoins" to config.noCodeCoins,
+                    "adminUid" to adminUid,
+                    "timestamp" to System.currentTimeMillis()
+                )
+            ).await()
+
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun grantSignupBonus(uid: String, amountCoins: Long = 200L): Result<Unit> {
+        return try {
+            val now = System.currentTimeMillis()
+            val adminUid = auth.currentUser?.uid.orEmpty()
+            val txRef = database.getReference(Constants.NODE_TRANSACTIONS).child(uid).push()
+            val txId = txRef.key ?: UUID.randomUUID().toString()
+
+            val txPayload = mapOf(
+                "id" to txId,
+                "type" to "signup_bonus",
+                "source" to "manual_admin_grant",
+                "amount" to amountCoins,
+                "title" to "Signup Bonus",
+                "description" to "Signup bonus granted by admin",
+                "createdAt" to now
+            )
+
+            val updates = hashMapOf<String, Any>(
+                "${Constants.NODE_USERS}/$uid/flags/signupBonusGiven" to true,
+                "${Constants.NODE_TRANSACTIONS}/$uid/$txId" to txPayload,
+                "${Constants.NODE_USER_LEDGER}/$uid/$txId" to txPayload,
+                "${Constants.NODE_USERS}/$uid/earnings/$txId" to mapOf(
+                    "amount" to amountCoins,
+                    "source" to "signup_bonus",
+                    "timestamp" to now
+                )
+            )
+
+            database.getReference(Constants.NODE_WALLETS).child(uid).child("coins")
+                .setValue(com.google.firebase.database.ServerValue.increment(amountCoins)).await()
+            database.getReference(Constants.NODE_WALLETS).child(uid).child("totalEarned")
+                .setValue(com.google.firebase.database.ServerValue.increment(amountCoins)).await()
+
+            database.reference.updateChildren(updates).await()
+
+            database.getReference("adminAudit").push().setValue(
+                mapOf(
+                    "action" to "manual_signup_bonus_granted",
+                    "targetUid" to uid,
+                    "amountCoins" to amountCoins,
+                    "adminUid" to adminUid,
+                    "timestamp" to now
+                )
+            ).await()
+
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
         }
     }
 

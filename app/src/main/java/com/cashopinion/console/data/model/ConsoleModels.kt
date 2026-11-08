@@ -382,6 +382,13 @@ data class DailyBonusConfig(
 )
 
 @Keep
+data class SignupBonusConfig(
+    val enabled: Boolean = true,
+    val coins: Long = 200L,
+    val noCodeCoins: Long = 50L
+)
+
+@Keep
 data class SpinSegmentItem(
     val id: Int = 0,
     val label: String = "",

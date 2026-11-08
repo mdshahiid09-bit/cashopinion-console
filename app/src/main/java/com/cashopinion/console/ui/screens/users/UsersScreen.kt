@@ -35,7 +35,8 @@ fun UsersScreen(
     val colors = CashTheme.colors
     val scope = rememberCoroutineScope()
     val clipboardManager = LocalClipboardManager.current
-    val allUsers by consoleRepo.observeUsers().collectAsState(initial = emptyList())
+    val usersFlow = remember(consoleRepo) { consoleRepo.observeUsers() }
+    val allUsers by usersFlow.collectAsState(initial = emptyList())
 
     var searchQuery by remember { mutableStateOf("") }
     var selectedUser by remember { mutableStateOf<UserItem?>(null) }
@@ -278,6 +279,49 @@ fun UsersScreen(
                                     style = MaterialTheme.typography.bodySmall,
                                     color = colors.textSecondary
                                 )
+
+                                val hasSignupBonus = user.flags.contains("signup_bonus")
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "Signup Bonus:",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = colors.textSecondary
+                                    )
+                                    Surface(
+                                        shape = Shapes.Chip,
+                                        color = if (hasSignupBonus) colors.success.copy(alpha = 0.15f) else colors.warning.copy(alpha = 0.15f)
+                                    ) {
+                                        Text(
+                                            text = if (hasSignupBonus) "CLAIMED" else "NOT CLAIMED",
+                                            color = if (hasSignupBonus) colors.success else colors.warning,
+                                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp, fontWeight = FontWeight.Bold),
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        val hasBonus = user.flags.contains("signup_bonus")
+                        if (!hasBonus) {
+                            var isGrantingBonus by remember { mutableStateOf(false) }
+                            OutlinedButton(
+                                onClick = {
+                                    isGrantingBonus = true
+                                    scope.launch {
+                                        consoleRepo.grantSignupBonus(user.uid, 200L)
+                                        isGrantingBonus = false
+                                        selectedUser = null
+                                    }
+                                },
+                                enabled = !isGrantingBonus,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(if (isGrantingBonus) "Granting..." else "Grant 200 Coins Signup Bonus")
                             }
                         }
 

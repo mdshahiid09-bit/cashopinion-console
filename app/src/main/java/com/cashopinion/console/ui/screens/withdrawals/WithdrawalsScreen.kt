@@ -37,7 +37,8 @@ fun WithdrawalsScreen(
     val colors = CashTheme.colors
     val scope = rememberCoroutineScope()
     val clipboardManager = LocalClipboardManager.current
-    val allWithdrawals by consoleRepo.observeWithdrawals().collectAsState(initial = emptyList())
+    val withdrawalsFlow = remember(consoleRepo) { consoleRepo.observeWithdrawals() }
+    val allWithdrawals by withdrawalsFlow.collectAsState(initial = emptyList())
 
     var selectedTab by remember { mutableIntStateOf(0) }
     val tabTitles = listOf("Pending", "Paid", "Rejected", "Reversed")
