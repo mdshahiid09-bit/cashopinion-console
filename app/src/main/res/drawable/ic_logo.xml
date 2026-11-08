@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="96dp"
+    android:height="96dp"
+    android:viewportWidth="96"
+    android:viewportHeight="96">
+
+    <!-- Gradient Background Shield / Opinion Bubble -->
+    <path
+        android:pathData="M48,6 C68.99,6 86,23.01 86,44 C86,52.8 82.95,60.9 77.85,67.3 L80.8,82.2 C81.2,84.2 79.4,85.9 77.4,85.4 L62.8,81.8 C58.2,83.8 53.2,85 48,85 C27.01,85 10,67.99 10,47 C10,26.01 27.01,6 48,6 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="10"
+                android:startY="6"
+                android:endX="86"
+                android:endY="85"
+                android:startColor="#6366F1"
+                android:endColor="#4338CA" />
+        </aapt:attr>
+    </path>
+
+    <!-- Outer Gold Ring -->
+    <path
+        android:pathData="M48,16 C63.46,16 76,28.54 76,44 C76,59.46 63.46,72 48,72 C32.54,72 20,59.46 20,44 C20,28.54 32.54,16 48,16 Z"
+        android:strokeWidth="2.5"
+        android:strokeColor="#FFD700" />
+
+    <!-- Golden Coin Center -->
+    <path
+        android:pathData="M48,20 C61.25,20 72,30.75 72,44 C72,57.25 61.25,68 48,68 C34.75,68 24,57.25 24,44 C24,30.75 34.75,20 48,20 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="24"
+                android:startY="20"
+                android:endX="72"
+                android:endY="68"
+                android:startColor="#FFB300"
+                android:endColor="#FF6D1F" />
+        </aapt:attr>
+    </path>
+
+    <!-- Inner Coin Ridge -->
+    <path
+        android:pathData="M48,24 C59.05,24 68,32.95 68,44 C68,55.05 59.05,64 48,64 C36.95,64 28,55.05 28,44 C28,32.95 36.95,24 48,24 Z"
+        android:strokeWidth="1.5"
+        android:strokeColor="#FFE082" />
+
+    <!-- Stylized "C" for Cash Opinion -->
+    <path
+        android:pathData="M56,33 C53.6,31.7 50.9,31 48,31 C40.8,31 35,36.8 35,44 C35,51.2 40.8,57 48,57 C51,57 53.8,56.2 56.1,54.8 L54.2,50.8 C52.5,51.9 50.4,52.6 48,52.6 C43.2,52.6 39.4,48.8 39.4,44 C39.4,39.2 43.2,35.4 48,35.4 C50.3,35.4 52.3,36 53.9,37.1 Z"
+        android:fillColor="#FFFFFF" />
+
+    <!-- Inner Sparkle -->
+    <path
+        android:pathData="M48,37 L49.5,41.5 L54,43 L49.5,44.5 L48,49 L46.5,44.5 L42,43 L46.5,41.5 Z"
+        android:fillColor="#FFFFFF" />
+</vector>

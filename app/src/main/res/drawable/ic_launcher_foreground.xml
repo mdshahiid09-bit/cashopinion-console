@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="432"
+    android:viewportHeight="432">
+
+    <!-- Outer Gold Rim -->
+    <path
+        android:pathData="M 216, 106 A 110,110 0 1,0 216, 326 A 110,110 0 1,0 216, 106 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="106"
+                android:startY="106"
+                android:endX="326"
+                android:endY="326"
+                android:startColor="#FFE082"
+                android:endColor="#FF8F00" />
+        </aapt:attr>
+    </path>
+
+    <!-- Outer Gold Ring Accent -->
+    <path
+        android:pathData="M 216, 108 A 108,108 0 1,0 216, 324 A 108,108 0 1,0 216, 108 Z"
+        android:strokeWidth="2.5"
+        android:strokeColor="#FFF8E1" />
+
+    <!-- Inner Coin Face -->
+    <path
+        android:pathData="M 216, 118 A 98,98 0 1,0 216, 314 A 98,98 0 1,0 216, 118 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="118"
+                android:startY="118"
+                android:endX="314"
+                android:endY="314"
+                android:startColor="#FFD54F"
+                android:endColor="#FF6F00" />
+        </aapt:attr>
+    </path>
+
+    <!-- Inner Coin Ridge -->
+    <path
+        android:pathData="M 216, 128 A 88,88 0 1,0 216, 304 A 88,88 0 1,0 216, 128 Z"
+        android:strokeWidth="3"
+        android:strokeColor="#FFE082" />
+
+    <!-- Stylized "C" for Cash Opinion -->
+    <path
+        android:pathData="M 252, 172 C 241, 164 229, 160 216, 160 C 185.1, 160 160, 185.1 160, 216 C 160, 246.9 185.1, 272 216, 272 C 229, 272 241, 268 252, 260 L 242, 242 C 234.5, 248 225.5, 252 216, 252 C 196.1, 252 180, 235.9 180, 216 C 180, 196.1 196.1, 180 216, 180 C 225.5, 180 234.5, 184 242, 190 Z"
+        android:fillColor="#FFFFFF" />
+
+    <!-- Inner Sparkle Star -->
+    <path
+        android:pathData="M 216, 192 L 221, 211 L 240, 216 L 221, 221 L 216, 240 L 211, 221 L 192, 216 L 211, 211 Z"
+        android:fillColor="#FFFFFF" />
+</vector>

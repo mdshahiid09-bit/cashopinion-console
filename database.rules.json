@@ -1,0 +1,137 @@
+{
+  "rules": {
+    "adminUids": {
+      ".read": "auth != null",
+      ".write": "auth != null && auth.uid === 'BV6iHH8GAeZEDmhnyAeY7JUEKRf1'"
+    },
+    "admins": {
+      ".read": "auth != null && (root.child('admins').child(auth.uid).val() === true || auth.uid === 'BV6iHH8GAeZEDmhnyAeY7JUEKRf1')",
+      ".write": "auth != null && auth.uid === 'BV6iHH8GAeZEDmhnyAeY7JUEKRf1'"
+    },
+    "adminProfiles": {
+      "$uid": {
+        ".read": "auth != null && (auth.uid === $uid || root.child('admins').child(auth.uid).val() === true || auth.uid === 'BV6iHH8GAeZEDmhnyAeY7JUEKRf1')",
+        ".write": "auth != null && (auth.uid === $uid || auth.uid === 'BV6iHH8GAeZEDmhnyAeY7JUEKRf1')"
+      }
+    },
+    "adminAudit": {
+      ".read": "auth != null && auth.uid === 'BV6iHH8GAeZEDmhnyAeY7JUEKRf1'",
+      ".write": "auth != null && (root.child('admins').child(auth.uid).val() === true || auth.uid === 'BV6iHH8GAeZEDmhnyAeY7JUEKRf1')"
+    },
+    "tasks": {
+      ".read": "auth != null",
+      ".write": "auth != null && (root.child('admins').child(auth.uid).val() === true || auth.uid === 'BV6iHH8GAeZEDmhnyAeY7JUEKRf1')",
+      ".indexOn": ["status", "active", "order", "createdAt"]
+    },
+    "userTasks": {
+      "$uid": {
+        ".read": "auth != null && (auth.uid === $uid || root.child('admins').child(auth.uid).val() === true || auth.uid === 'BV6iHH8GAeZEDmhnyAeY7JUEKRf1')",
+        "$taskId": {
+          ".write": "auth != null && ((root.child('admins').child(auth.uid).val() === true || auth.uid === 'BV6iHH8GAeZEDmhnyAeY7JUEKRf1') || (auth.uid === $uid && root.child('users').child(auth.uid).child('isBanned').val() !== true && (!data.exists() || data.child('status').val() !== 'approved') && (!newData.exists() || newData.child('status').val() !== 'approved') && (!newData.exists() || !newData.hasChild('coinsAwarded') || newData.child('coinsAwarded').val() === 0 || (data.exists() && newData.child('coinsAwarded').val() === data.child('coinsAwarded').val()))))"
+        }
+      }
+    },
+    "reviewQueue": {
+      ".read": "auth != null && (root.child('admins').child(auth.uid).val() === true || auth.uid === 'BV6iHH8GAeZEDmhnyAeY7JUEKRf1')",
+      "$submissionKey": {
+        ".write": "auth != null && ((root.child('admins').child(auth.uid).val() === true || auth.uid === 'BV6iHH8GAeZEDmhnyAeY7JUEKRf1') || (newData.child('uid').val() === auth.uid && root.child('users').child(auth.uid).child('isBanned').val() !== true))"
+      }
+    },
+    "wallets": {
+      "$uid": {
+        ".read": "auth != null && (auth.uid === $uid || root.child('admins').child(auth.uid).val() === true || auth.uid === 'BV6iHH8GAeZEDmhnyAeY7JUEKRf1')",
+        ".write": "auth != null && (root.child('admins').child(auth.uid).val() === true || auth.uid === 'BV6iHH8GAeZEDmhnyAeY7JUEKRf1')"
+      }
+    },
+    "transactions": {
+      "$uid": {
+        ".read": "auth != null && (auth.uid === $uid || root.child('admins').child(auth.uid).val() === true || auth.uid === 'BV6iHH8GAeZEDmhnyAeY7JUEKRf1')",
+        ".write": "auth != null && (root.child('admins').child(auth.uid).val() === true || auth.uid === 'BV6iHH8GAeZEDmhnyAeY7JUEKRf1')",
+        ".indexOn": ["createdAt"]
+      }
+    },
+    "userLedger": {
+      "$uid": {
+        ".read": "auth != null && (auth.uid === $uid || root.child('admins').child(auth.uid).val() === true || auth.uid === 'BV6iHH8GAeZEDmhnyAeY7JUEKRf1')",
+        ".write": "auth != null && (root.child('admins').child(auth.uid).val() === true || auth.uid === 'BV6iHH8GAeZEDmhnyAeY7JUEKRf1')"
+      }
+    },
+    "withdrawals": {
+      ".read": "auth != null && (root.child('admins').child(auth.uid).val() === true || auth.uid === 'BV6iHH8GAeZEDmhnyAeY7JUEKRf1')",
+      ".indexOn": ["status", "requestedAt"],
+      "$id": {
+        ".write": "auth != null && (root.child('admins').child(auth.uid).val() === true || auth.uid === 'BV6iHH8GAeZEDmhnyAeY7JUEKRf1' || (auth.uid === newData.child('uid').val() && !data.exists() && newData.child('status').val() === 'pending'))"
+      }
+    },
+    "userWithdrawals": {
+      "$uid": {
+        ".read": "auth != null && (auth.uid === $uid || root.child('admins').child(auth.uid).val() === true || auth.uid === 'BV6iHH8GAeZEDmhnyAeY7JUEKRf1')",
+        "$id": {
+          ".write": "auth != null && (root.child('admins').child(auth.uid).val() === true || auth.uid === 'BV6iHH8GAeZEDmhnyAeY7JUEKRf1' || (auth.uid === $uid && !data.exists() && newData.child('status').val() === 'pending'))"
+        }
+      }
+    },
+    "users": {
+      "$uid": {
+        ".read": "auth != null && (auth.uid === $uid || root.child('admins').child(auth.uid).val() === true || auth.uid === 'BV6iHH8GAeZEDmhnyAeY7JUEKRf1')",
+        ".write": "auth != null && (root.child('admins').child(auth.uid).val() === true || auth.uid === 'BV6iHH8GAeZEDmhnyAeY7JUEKRf1' || (auth.uid === $uid && (!newData.hasChild('isBanned') || newData.child('isBanned').val() === data.child('isBanned').val())))",
+        "earnings": {
+          ".read": "auth != null && (auth.uid === $uid || root.child('admins').child(auth.uid).val() === true || auth.uid === 'BV6iHH8GAeZEDmhnyAeY7JUEKRf1')",
+          "$earningId": {
+            ".write": "auth != null && (root.child('admins').child(auth.uid).val() === true || auth.uid === 'BV6iHH8GAeZEDmhnyAeY7JUEKRf1' || (auth.uid === $uid && !data.exists() && newData.hasChildren(['amount', 'source', 'timestamp'])))"
+          }
+        },
+        "spinGrants": {
+          ".read": "auth != null && (auth.uid === $uid || root.child('admins').child(auth.uid).val() === true || auth.uid === 'BV6iHH8GAeZEDmhnyAeY7JUEKRf1')",
+          "$grantId": {
+            ".write": "auth != null && (root.child('admins').child(auth.uid).val() === true || auth.uid === 'BV6iHH8GAeZEDmhnyAeY7JUEKRf1' || auth.uid === $uid)"
+          }
+        }
+      }
+    },
+    "config": {
+      ".read": "auth != null",
+      ".write": "auth != null && (root.child('admins').child(auth.uid).val() === true || auth.uid === 'BV6iHH8GAeZEDmhnyAeY7JUEKRf1')"
+    },
+    "seasons": {
+      "$seasonId": {
+        ".read": "auth != null",
+        ".write": "auth != null && (root.child('admins').child(auth.uid).val() === true || auth.uid === 'BV6iHH8GAeZEDmhnyAeY7JUEKRf1')"
+      }
+    },
+    "supportTickets": {
+      ".read": "auth != null",
+      "$ticketId": {
+        ".write": "auth != null && (root.child('admins').child(auth.uid).val() === true || auth.uid === 'BV6iHH8GAeZEDmhnyAeY7JUEKRf1' || auth.uid === newData.child('uid').val() || auth.uid === data.child('uid').val())"
+      }
+    },
+    "notifications": {
+      ".read": "auth != null",
+      ".write": "auth != null && (root.child('admins').child(auth.uid).val() === true || auth.uid === 'BV6iHH8GAeZEDmhnyAeY7JUEKRf1')"
+    },
+    "popups": {
+      ".read": "auth != null",
+      ".write": "auth != null && (root.child('admins').child(auth.uid).val() === true || auth.uid === 'BV6iHH8GAeZEDmhnyAeY7JUEKRf1')"
+    },
+    "banners": {
+      ".read": "auth != null",
+      ".write": "auth != null && (root.child('admins').child(auth.uid).val() === true || auth.uid === 'BV6iHH8GAeZEDmhnyAeY7JUEKRf1')"
+    },
+    "pages": {
+      ".read": "auth != null",
+      ".write": "auth != null && (root.child('admins').child(auth.uid).val() === true || auth.uid === 'BV6iHH8GAeZEDmhnyAeY7JUEKRf1')"
+    },
+    "faq": {
+      ".read": "auth != null",
+      ".write": "auth != null && (root.child('admins').child(auth.uid).val() === true || auth.uid === 'BV6iHH8GAeZEDmhnyAeY7JUEKRf1')"
+    },
+    "backups": {
+      ".read": "auth != null && auth.uid === 'BV6iHH8GAeZEDmhnyAeY7JUEKRf1'",
+      ".write": "auth != null && auth.uid === 'BV6iHH8GAeZEDmhnyAeY7JUEKRf1'"
+    },
+    "serverRequests": {
+      ".read": "auth != null && (root.child('admins').child(auth.uid).val() === true || auth.uid === 'BV6iHH8GAeZEDmhnyAeY7JUEKRf1')",
+      ".write": "auth != null && (root.child('admins').child(auth.uid).val() === true || auth.uid === 'BV6iHH8GAeZEDmhnyAeY7JUEKRf1')"
+    }
+  }
+}

@@ -1,0 +1,127 @@
+{
+  "project_info": {
+    "project_number": "268089376986",
+    "firebase_url": "https://cash-opinion-default-rtdb.firebaseio.com",
+    "project_id": "cash-opinion",
+    "storage_bucket": "cash-opinion.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:268089376986:android:6eb6ef324906e8ec5565e3",
+        "android_client_info": {
+          "package_name": "com.cashopinion.admin.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "268089376986-bcsutk76f2d2eqnurrkavd5cj3h07dgu.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB4uH2bCh5BPUoMa0Dd5_GU7y2K-5rzD8s"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "268089376986-bcsutk76f2d2eqnurrkavd5cj3h07dgu.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:268089376986:android:5c0bcaf9f05ae9195565e3",
+        "android_client_info": {
+          "package_name": "com.cashopinion.shahid.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "268089376986-bcsutk76f2d2eqnurrkavd5cj3h07dgu.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB4uH2bCh5BPUoMa0Dd5_GU7y2K-5rzD8s"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "268089376986-bcsutk76f2d2eqnurrkavd5cj3h07dgu.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:268089376986:android:29dd4bd84e5312995565e3",
+        "android_client_info": {
+          "package_name": "com.shahid.cashoponion.android.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "268089376986-bcsutk76f2d2eqnurrkavd5cj3h07dgu.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB4uH2bCh5BPUoMa0Dd5_GU7y2K-5rzD8s"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "268089376986-bcsutk76f2d2eqnurrkavd5cj3h07dgu.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:268089376986:android:8ef12ca039b543d25565e3",
+        "android_client_info": {
+          "package_name": "com.cashopinion.console"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "268089376986-bcsutk76f2d2eqnurrkavd5cj3h07dgu.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB4uH2bCh5BPUoMa0Dd5_GU7y2K-5rzD8s"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "268089376986-bcsutk76f2d2eqnurrkavd5cj3h07dgu.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
