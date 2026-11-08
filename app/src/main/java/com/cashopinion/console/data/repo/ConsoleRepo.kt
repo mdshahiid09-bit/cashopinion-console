@@ -1386,6 +1386,25 @@ class ConsoleRepo(
         }
     }
 
+    suspend fun togglePromoCodeStatus(code: String, active: Boolean): Result<Unit> {
+        return try {
+            val codeKey = code.trim().uppercase()
+            database.getReference(Constants.NODE_PROMO_CODES).child(codeKey).child("active").setValue(active).await()
+            val adminUid = auth.currentUser?.uid ?: "console"
+            database.getReference("adminAudit").push().setValue(
+                mapOf(
+                    "action" to if (active) "ACTIVATE_PROMO" else "DEACTIVATE_PROMO",
+                    "target" to codeKey,
+                    "adminUid" to adminUid,
+                    "timestamp" to System.currentTimeMillis()
+                )
+            ).await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     suspend fun deletePromoCode(code: String): Result<Unit> {
         return try {
             database.getReference(Constants.NODE_PROMO_CODES).child(code).removeValue().await()
