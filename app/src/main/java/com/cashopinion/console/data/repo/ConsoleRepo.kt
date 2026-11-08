@@ -682,9 +682,16 @@ class ConsoleRepo(
                 val list = mutableListOf<TaskItem>()
                 for (child in snapshot.children) {
                     val id = child.key.orEmpty()
+                    val appName = child.child("appName").value?.toString().orEmpty()
                     val title = child.child("title").value?.toString()
                         ?: child.child("appName").value?.toString().orEmpty()
                     val desc = child.child("description").value?.toString().orEmpty()
+                    val packageName = child.child("packageName").value?.toString()
+                        ?: child.child("appPackage").value?.toString().orEmpty()
+                    val requiredUsageMinutes = child.child("requiredUsageMinutes").value?.toString()?.toLongOrNull()
+                        ?: ((child.child("requiredUsageSeconds").value?.toString()?.toLongOrNull() ?: 0L) / 60L)
+                    val bannerUrl = child.child("bannerUrl").value?.toString().orEmpty()
+                    val adminNote = child.child("adminNote").value?.toString().orEmpty()
                     val logoUrl = child.child("logoUrl").value?.toString()
                         ?: child.child("iconUrl").value?.toString().orEmpty()
                     val link = child.child("link").value?.toString()
@@ -716,7 +723,7 @@ class ConsoleRepo(
                         ?: child.child("slots").value?.toString()?.toLongOrNull() ?: 0L
                     val deadline = child.child("deadline").value?.toString()?.toLongOrNull()
                         ?: child.child("expiryAt").value?.toString()?.toLongOrNull() ?: 0L
-                    val proofType = child.child("proofType").value?.toString() ?: "Screenshot"
+                    val proofType = child.child("proofType").value?.toString() ?: "Optional"
                     val proofHint = child.child("proofHint").value?.toString().orEmpty()
                     val terms = child.child("terms").value?.toString().orEmpty()
                     val status = child.child("status").value?.toString() ?: "draft"
@@ -728,9 +735,13 @@ class ConsoleRepo(
                     list.add(
                         TaskItem(
                             taskId = id,
+                            appName = appName,
                             title = title,
                             description = desc,
+                            packageName = packageName,
+                            requiredUsageMinutes = requiredUsageMinutes,
                             logoUrl = logoUrl,
+                            bannerUrl = bannerUrl,
                             link = link,
                             steps = stepsList,
                             reward = reward,
@@ -740,6 +751,7 @@ class ConsoleRepo(
                             proofType = proofType,
                             proofHint = proofHint,
                             terms = terms,
+                            adminNote = adminNote,
                             status = status,
                             completionsCount = completionsCount,
                             publishedAt = publishedAt,
@@ -772,8 +784,14 @@ class ConsoleRepo(
             val payload = hashMapOf<String, Any>(
                 "taskId" to id,
                 "title" to task.title.trim(),
-                "appName" to task.title.trim(),
+                "appName" to (task.appName.ifBlank { task.title }).trim(),
                 "description" to task.description.trim(),
+                "packageName" to task.packageName.trim(),
+                "appPackage" to task.packageName.trim(),
+                "requiredUsageMinutes" to task.requiredUsageMinutes,
+                "requiredUsageSeconds" to (task.requiredUsageMinutes * 60L),
+                "bannerUrl" to task.bannerUrl.trim(),
+                "adminNote" to task.adminNote.trim(),
                 "logoUrl" to task.logoUrl,
                 "iconUrl" to task.logoUrl,
                 "link" to task.link.trim(),
@@ -782,6 +800,7 @@ class ConsoleRepo(
                 "steps" to task.steps,
                 "reward" to task.reward,
                 "rewardCoins" to task.reward,
+                "prizeCoins" to task.reward,
                 "perUserLimit" to task.perUserLimit,
                 "totalLimit" to task.totalLimit,
                 "slots" to (if (task.totalLimit > 0) task.totalLimit else -1L),

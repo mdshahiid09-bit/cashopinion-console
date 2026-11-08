@@ -36,6 +36,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import com.cashopinion.console.R
 import com.cashopinion.console.data.model.TaskItem
 import com.cashopinion.console.data.repo.ConsoleRepo
@@ -297,6 +299,13 @@ fun TaskCardItem(
                 }
 
                 Column {
+                    if (task.appName.isNotBlank() && !task.appName.equals(task.title, ignoreCase = true)) {
+                        Text(
+                            text = task.appName.uppercase(),
+                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, fontWeight = FontWeight.Bold),
+                            color = CashColors.GoldPrimary
+                        )
+                    }
                     Text(
                         text = task.title,
                         style = MaterialTheme.typography.titleMedium,
@@ -304,11 +313,42 @@ fun TaskCardItem(
                         color = colors.textPrimary,
                         maxLines = 1
                     )
-                    Text(
-                        text = "ID: ${task.taskId.take(12)} · Proof: ${task.proofType}",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = colors.textSecondary
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text(
+                            text = "ID: ${task.taskId.take(8)} · Proof: ${task.proofType}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = colors.textSecondary
+                        )
+                        if (task.packageName.isNotBlank()) {
+                            Surface(
+                                shape = Shapes.Chip,
+                                color = colors.surfaceVariant
+                            ) {
+                                Text(
+                                    text = task.packageName.takeLast(18),
+                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+                                    color = colors.textSecondary,
+                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                                )
+                            }
+                        }
+                        if (task.requiredUsageMinutes > 0L) {
+                            Surface(
+                                shape = Shapes.Chip,
+                                color = CashColors.GoldPrimary.copy(alpha = 0.15f)
+                            ) {
+                                Text(
+                                    text = "${task.requiredUsageMinutes}m",
+                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp, fontWeight = FontWeight.Bold),
+                                    color = CashColors.GoldPrimary,
+                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                                )
+                            }
+                        }
+                    }
                 }
             }
 
@@ -472,10 +512,14 @@ fun TaskEditorDialog(
     val context = LocalContext.current
     val hasCompletions = initialTask.completionsCount > 0
 
-    // Form fields in exact order 1..14
-    var logoUrl by remember { mutableStateOf(initialTask.logoUrl) }
+    // Form fields - Complete 18 fields
+    var appName by remember { mutableStateOf(initialTask.appName) }
     var title by remember { mutableStateOf(initialTask.title) }
     var description by remember { mutableStateOf(initialTask.description) }
+    var packageName by remember { mutableStateOf(initialTask.packageName) }
+    var requiredUsageMinutesStr by remember { mutableStateOf(if (initialTask.requiredUsageMinutes > 0L) initialTask.requiredUsageMinutes.toString() else "") }
+    var logoUrl by remember { mutableStateOf(initialTask.logoUrl) }
+    var bannerUrl by remember { mutableStateOf(initialTask.bannerUrl) }
     var link by remember { mutableStateOf(initialTask.link) }
     var steps by remember { mutableStateOf(if (initialTask.steps.isNotEmpty()) initialTask.steps else listOf("")) }
     var rewardStr by remember { mutableStateOf(if (initialTask.reward > 0) initialTask.reward.toString() else "100") }
@@ -485,21 +529,25 @@ fun TaskEditorDialog(
     var proofType by remember { mutableStateOf(initialTask.proofType.ifBlank { "Optional" }) }
     var proofHint by remember { mutableStateOf(initialTask.proofHint) }
     var terms by remember { mutableStateOf(initialTask.terms) }
+    var adminNote by remember { mutableStateOf(initialTask.adminNote) }
     var publishImmediately by remember { mutableStateOf(initialTask.status == "published") }
 
     // Validation & Error Tracking
     var showValidationErrors by remember { mutableStateOf(false) }
-    var newStepInput by remember { mutableStateOf("") }
     var showDiscardPrompt by remember { mutableStateOf(false) }
 
     // Dirty state tracking
     val isDirty = remember(
-        logoUrl, title, description, link, steps, rewardStr,
-        perUserLimitStr, totalLimitStr, deadlineStr, proofType, proofHint, terms, publishImmediately
+        appName, title, description, packageName, requiredUsageMinutesStr, logoUrl, bannerUrl,
+        link, steps, rewardStr, perUserLimitStr, totalLimitStr, deadlineStr, proofType, proofHint, terms, adminNote, publishImmediately
     ) {
-        logoUrl != initialTask.logoUrl ||
+        appName != initialTask.appName ||
                 title != initialTask.title ||
                 description != initialTask.description ||
+                packageName != initialTask.packageName ||
+                requiredUsageMinutesStr != (if (initialTask.requiredUsageMinutes > 0L) initialTask.requiredUsageMinutes.toString() else "") ||
+                logoUrl != initialTask.logoUrl ||
+                bannerUrl != initialTask.bannerUrl ||
                 link != initialTask.link ||
                 steps != initialTask.steps ||
                 rewardStr != (if (initialTask.reward > 0) initialTask.reward.toString() else "100") ||
@@ -508,6 +556,7 @@ fun TaskEditorDialog(
                 proofType != (initialTask.proofType.ifBlank { "Optional" }) ||
                 proofHint != initialTask.proofHint ||
                 terms != initialTask.terms ||
+                adminNote != initialTask.adminNote ||
                 publishImmediately != (initialTask.status == "published")
     }
 
@@ -544,6 +593,7 @@ fun TaskEditorDialog(
     val perUserNum = perUserLimitStr.toIntOrNull() ?: 0
     val isPerUserValid = perUserNum >= 1
     val totalLimitNum = totalLimitStr.toLongOrNull() ?: 0L
+    val requiredUsageMinutesNum = requiredUsageMinutesStr.toLongOrNull() ?: 0L
     val parsedDeadlineMs = parseIstToEpoch(deadlineStr)
     val isDeadlineValid = deadlineStr.isBlank() || parsedDeadlineMs > System.currentTimeMillis()
 
@@ -560,7 +610,7 @@ fun TaskEditorDialog(
 
     val isReadyToPublish = invalidFieldCount == 0
 
-    AlertDialog(
+    Dialog(
         onDismissRequest = {
             if (isDirty) {
                 showDiscardPrompt = true
@@ -568,520 +618,624 @@ fun TaskEditorDialog(
                 onDismiss()
             }
         },
-        title = {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = if (initialTask.taskId.isBlank()) "Create New Task" else "Edit Task",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = colors.textPrimary
-                )
-                if (isDirty) {
-                    Surface(
-                        shape = Shapes.Chip,
-                        color = CashColors.GoldPrimary.copy(alpha = 0.15f)
-                    ) {
-                        Text(
-                            text = "Unsaved Changes",
-                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                            color = CashColors.GoldPrimary,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                        )
-                    }
-                }
-            }
-        },
-        text = {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 520.dp)
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                // 1. Logo (Gallery pick, 256px, max 150KB, preview, remove)
-                Text(
-                    text = "1. LOGO ICON (OPTIONAL)",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = CashColors.GoldPrimary,
-                    fontWeight = FontWeight.Bold
-                )
-
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    if (logoUrl.isNotBlank()) {
-                        TaskLogoThumbnail(base64Url = logoUrl)
-                        OutlinedButton(
-                            onClick = {
-                                SoundFx.playClick()
-                                logoUrl = ""
-                            },
-                            modifier = Modifier.height(34.dp)
-                        ) {
-                            Text("Remove Logo", fontSize = 11.sp, color = colors.error)
-                        }
-                    } else {
-                        Surface(
-                            modifier = Modifier.size(54.dp),
-                            shape = CircleShape,
-                            color = colors.surfaceVariant
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    painter = painterResource(id = R.drawable.ic_document),
-                                    contentDescription = null,
-                                    tint = colors.textSecondary,
-                                    modifier = Modifier.size(24.dp)
-                                )
-                            }
-                        }
-
-                        Button(
-                            onClick = {
-                                SoundFx.playClick()
-                                imagePickerLauncher.launch("image/*")
-                            },
-                            modifier = Modifier.height(36.dp)
-                        ) {
-                            Icon(
-                                painter = painterResource(id = R.drawable.ic_sparkle),
-                                contentDescription = null,
-                                modifier = Modifier.size(14.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Pick from Gallery (<=150KB)")
-                        }
-                    }
-                }
-
-                // 2. Title (Required, 3 to 80 chars, counter shown)
-                OutlinedTextField(
-                    value = title,
-                    onValueChange = { if (it.length <= 80) title = it },
-                    label = { Text("2. Task Title *") },
-                    supportingText = {
-                        Text(
-                            text = "${title.length} / 80 characters (min 3)",
-                            color = if (!isTitleValid && showValidationErrors) colors.error else colors.textSecondary
-                        )
-                    },
-                    isError = !isTitleValid && showValidationErrors,
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
-                if (!isTitleValid && showValidationErrors) {
-                    Text(
-                        text = "Title must be between 3 and 80 characters.",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = colors.error
-                    )
-                }
-
-                // 3. Description (Required, up to 1000 chars, multiline, counter shown)
-                OutlinedTextField(
-                    value = description,
-                    onValueChange = { if (it.length <= 1000) description = it },
-                    label = { Text("3. Task Description *") },
-                    supportingText = {
-                        Text(
-                            text = "${description.length} / 1000 characters",
-                            color = if (!isDescValid && showValidationErrors) colors.error else colors.textSecondary
-                        )
-                    },
-                    isError = !isDescValid && showValidationErrors,
-                    modifier = Modifier.fillMaxWidth(),
-                    minLines = 3,
-                    maxLines = 6
-                )
-
-                // 4. Target Link / URL (Required, https:// only)
-                OutlinedTextField(
-                    value = link,
-                    onValueChange = { link = it },
-                    label = { Text("4. Target Link (https:// required) *") },
-                    supportingText = {
-                        Text(
-                            text = if (!isLinkValid && (link.isNotBlank() || showValidationErrors))
-                                "Must begin with https://" else "Destination URL for user",
-                            color = if (!isLinkValid && (link.isNotBlank() || showValidationErrors)) colors.error else colors.textSecondary
-                        )
-                    },
-                    isError = !isLinkValid && (link.isNotBlank() || showValidationErrors),
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
-
-                // 5. Steps (Required min 1, add/edit/delete/reorder, each 1..300 chars)
-                Text(
-                    text = "5. TASK INSTRUCTION STEPS (MINIMUM 1 REQUIRED) *",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = CashColors.GoldPrimary,
-                    fontWeight = FontWeight.Bold
-                )
-
-                steps.forEachIndexed { index, stepText ->
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Surface(
-                            shape = CircleShape,
-                            color = colors.surfaceVariant,
-                            modifier = Modifier.size(24.dp)
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Text(
-                                    text = "${index + 1}",
-                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                    color = colors.primary
-                                )
-                            }
-                        }
-
-                        OutlinedTextField(
-                            value = stepText,
-                            onValueChange = { updated ->
-                                if (updated.length <= 300) {
-                                    val copy = steps.toMutableList()
-                                    copy[index] = updated
-                                    steps = copy
-                                }
-                            },
-                            label = { Text("Step ${index + 1} (${stepText.length}/300)") },
-                            modifier = Modifier.weight(1f),
-                            singleLine = true
-                        )
-
-                        // Reorder Up
-                        if (index > 0) {
-                            IconButton(
-                                onClick = {
-                                    val copy = steps.toMutableList()
-                                    val temp = copy[index]
-                                    copy[index] = copy[index - 1]
-                                    copy[index - 1] = temp
-                                    steps = copy
-                                },
-                                modifier = Modifier.size(28.dp)
-                            ) {
-                                Icon(
-                                    painter = painterResource(id = R.drawable.ic_back),
-                                    contentDescription = "Move Up",
-                                    tint = colors.textSecondary,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                            }
-                        }
-
-                        // Delete Step
-                        if (steps.size > 1) {
-                            IconButton(
-                                onClick = {
-                                    val copy = steps.toMutableList()
-                                    copy.removeAt(index)
-                                    steps = copy
-                                },
-                                modifier = Modifier.size(28.dp)
-                            ) {
-                                Icon(
-                                    painter = painterResource(id = R.drawable.ic_delete),
-                                    contentDescription = "Remove Step",
-                                    tint = colors.error,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                            }
-                        }
-                    }
-                }
-
-                // Add Step Button
-                OutlinedButton(
-                    onClick = {
-                        steps = steps + ""
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("+ Add Another Step")
-                }
-
-                if (!isStepsValid && showValidationErrors) {
-                    Text(
-                        text = "At least one non-empty step instruction is required.",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = colors.error
-                    )
-                }
-
-                // 6. Reward Coins (Required, integer min 1, locked after 1st completion)
-                OutlinedTextField(
-                    value = rewardStr,
-                    onValueChange = { if (!hasCompletions) rewardStr = it.filter { c -> c.isDigit() } },
-                    label = { Text("6. Reward Coins *") },
-                    supportingText = {
-                        Text(
-                            text = if (hasCompletions) "Locked after first completion" else "Amount of coins awarded upon verified proof",
-                            color = if (hasCompletions) colors.warning else colors.textSecondary
-                        )
-                    },
-                    readOnly = hasCompletions,
-                    trailingIcon = if (hasCompletions) {
-                        { Icon(painterResource(id = R.drawable.ic_lock), contentDescription = null, tint = colors.warning) }
-                    } else null,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
-
-                // 7. Per-User Limit (Required, integer min 1, default 1, locked after 1st completion)
-                OutlinedTextField(
-                    value = perUserLimitStr,
-                    onValueChange = { if (!hasCompletions) perUserLimitStr = it.filter { c -> c.isDigit() } },
-                    label = { Text("7. Per-User Limit * (Default: 1)") },
-                    readOnly = hasCompletions,
-                    trailingIcon = if (hasCompletions) {
-                        { Icon(painterResource(id = R.drawable.ic_lock), contentDescription = null, tint = colors.warning) }
-                    } else null,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
-
-                // 8. Total Limit (Optional, blank means unlimited)
-                OutlinedTextField(
-                    value = totalLimitStr,
-                    onValueChange = { if (!hasCompletions) totalLimitStr = it.filter { c -> c.isDigit() } },
-                    label = { Text("8. Total Limit (Optional, Blank = Unlimited)") },
-                    readOnly = hasCompletions,
-                    trailingIcon = if (hasCompletions) {
-                        { Icon(painterResource(id = R.drawable.ic_lock), contentDescription = null, tint = colors.warning) }
-                    } else null,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
-
-                // 9. Deadline (Optional, format: dd/MM/yyyy HH:mm IST)
-                OutlinedTextField(
-                    value = deadlineStr,
-                    onValueChange = { deadlineStr = it },
-                    label = { Text("9. Deadline IST (dd/MM/yyyy HH:mm, Optional)") },
-                    supportingText = {
-                        Text(
-                            text = if (!isDeadlineValid) "Deadline must be in the future to publish" else "Format: 31/12/2026 23:59",
-                            color = if (!isDeadlineValid) colors.error else colors.textSecondary
-                        )
-                    },
-                    isError = !isDeadlineValid,
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
-
-                // 10. Proof Type (Required Segmented: Screenshot, Text, Link)
-                Text(
-                    text = "10. PROOF TYPE REQUIRED *",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = CashColors.GoldPrimary,
-                    fontWeight = FontWeight.Bold
-                )
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    listOf("Optional", "Screenshot", "Text", "Link").forEach { typeOption ->
-                        FilterChip(
-                            selected = proofType.equals(typeOption, ignoreCase = true),
-                            onClick = {
-                                if (!hasCompletions) {
-                                    SoundFx.playClick()
-                                    proofType = typeOption
-                                }
-                            },
-                            enabled = !hasCompletions,
-                            label = { Text(if (typeOption == "Optional") "Optional (No Proof)" else typeOption) }
-                        )
-                    }
-                }
-                if (proofType.equals("Optional", ignoreCase = true)) {
-                    Text(
-                        text = "Proof is optional. Users can complete task and submit without proof, and admin can approve or reject directly.",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = colors.primary
-                    )
-                }
-                if (hasCompletions) {
-                    Text(
-                        text = "Proof type is locked after first completion.",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = colors.warning
-                    )
-                }
-
-                // 11. Proof Hint (Optional up to 200 chars)
-                OutlinedTextField(
-                    value = proofHint,
-                    onValueChange = { if (it.length <= 200) proofHint = it },
-                    label = { Text("11. Proof Submission Hint (Optional)") },
-                    supportingText = { Text("${proofHint.length} / 200 chars") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
-
-                // 12. Terms (Optional text or link to page key e.g. task_terms)
-                OutlinedTextField(
-                    value = terms,
-                    onValueChange = { terms = it },
-                    label = { Text("12. Terms / Rules / Page Key (Optional)") },
-                    supportingText = { Text("Shown in user app task terms screen") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
-
-                // 13. Publish Immediately Toggle
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth(0.96f)
+                .fillMaxHeight(0.94f),
+            shape = Shapes.Dialog,
+            color = colors.surface,
+            tonalElevation = 6.dp
+        ) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                // Modal Top Bar
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(Shapes.Chip)
-                        .background(colors.surfaceVariant)
-                        .padding(horizontal = 14.dp, vertical = 8.dp),
+                        .padding(horizontal = 16.dp, vertical = 14.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column {
+                    Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "13. Publish Immediately",
-                            style = MaterialTheme.typography.bodyMedium,
+                            text = if (initialTask.taskId.isBlank()) "Create New Task" else "Edit Task",
+                            style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Bold,
                             color = colors.textPrimary
                         )
                         Text(
-                            text = if (publishImmediately) "Task will be live to all users on save" else "Saved as draft (hidden from users)",
+                            text = "Full task builder: branding, package tracking, steps, limits & proof",
                             style = MaterialTheme.typography.labelSmall,
                             color = colors.textSecondary
                         )
                     }
 
-                    Switch(
-                        checked = publishImmediately,
-                        onCheckedChange = {
-                            SoundFx.playClick()
-                            publishImmediately = it
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (isDirty) {
+                            Surface(
+                                shape = Shapes.Chip,
+                                color = CashColors.GoldPrimary.copy(alpha = 0.15f)
+                            ) {
+                                Text(
+                                    text = "Unsaved Changes",
+                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                                    color = CashColors.GoldPrimary,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
                         }
-                    )
-                }
-            }
-        },
-        confirmButton = {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                // Save Draft Action (Allowed with only Title 3..80 chars)
-                OutlinedButton(
-                    onClick = {
-                        if (isTitleValid) {
-                            val draftTask = initialTask.copy(
-                                title = title.trim(),
-                                description = description.trim(),
-                                logoUrl = logoUrl,
-                                link = link.trim(),
-                                steps = validSteps,
-                                reward = rewardNum,
-                                perUserLimit = perUserNum.coerceAtLeast(1),
-                                totalLimit = totalLimitNum,
-                                deadline = parsedDeadlineMs,
-                                proofType = proofType,
-                                proofHint = proofHint.trim(),
-                                terms = terms.trim(),
-                                status = "draft"
+
+                        IconButton(
+                            onClick = {
+                                if (isDirty) showDiscardPrompt = true else onDismiss()
+                            },
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Icon(
+                                painter = painterResource(id = R.drawable.ic_close),
+                                contentDescription = "Close",
+                                tint = colors.textSecondary,
+                                modifier = Modifier.size(18.dp)
                             )
-                            onSave(draftTask)
-                        } else {
-                            showValidationErrors = true
                         }
-                    },
-                    enabled = isTitleValid
-                ) {
-                    Text("Save Draft")
+                    }
                 }
 
-                // Publish Action
-                Button(
-                    onClick = {
-                        if (publishImmediately) {
-                            if (isReadyToPublish) {
-                                val publishedTask = initialTask.copy(
-                                    title = title.trim(),
-                                    description = description.trim(),
-                                    logoUrl = logoUrl,
-                                    link = link.trim(),
-                                    steps = validSteps,
-                                    reward = rewardNum,
-                                    perUserLimit = perUserNum.coerceAtLeast(1),
-                                    totalLimit = totalLimitNum,
-                                    deadline = parsedDeadlineMs,
-                                    proofType = proofType,
-                                    proofHint = proofHint.trim(),
-                                    terms = terms.trim(),
-                                    status = "published"
-                                )
-                                onSave(publishedTask)
-                            } else {
-                                showValidationErrors = true
+                HorizontalDivider(color = colors.surfaceVariant)
+
+                // Scrollable Form Fields
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState())
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    // SECTION 1: BASIC INFORMATION
+                    Text(
+                        text = "1. BASIC INFORMATION *",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = CashColors.GoldPrimary,
+                        fontWeight = FontWeight.Bold
+                    )
+
+                    OutlinedTextField(
+                        value = appName,
+                        onValueChange = { appName = it },
+                        label = { Text("App Name (e.g. Cash Opinion, Google Pay)") },
+                        supportingText = { Text("Shown as primary app branding on user task card") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+
+                    OutlinedTextField(
+                        value = title,
+                        onValueChange = { if (it.length <= 80) title = it },
+                        label = { Text("Task Title *") },
+                        supportingText = {
+                            Text(
+                                text = "${title.length} / 80 characters (min 3 required)",
+                                color = if (!isTitleValid && showValidationErrors) colors.error else colors.textSecondary
+                            )
+                        },
+                        isError = !isTitleValid && showValidationErrors,
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                    if (!isTitleValid && showValidationErrors) {
+                        Text(
+                            text = "Title must be between 3 and 80 characters.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = colors.error
+                        )
+                    }
+
+                    OutlinedTextField(
+                        value = description,
+                        onValueChange = { if (it.length <= 1000) description = it },
+                        label = { Text("Task Description") },
+                        supportingText = { Text("${description.length} / 1000 characters") },
+                        isError = !isDescValid && showValidationErrors,
+                        modifier = Modifier.fillMaxWidth(),
+                        minLines = 2,
+                        maxLines = 5
+                    )
+
+                    // SECTION 2: MEDIA & BRANDING
+                    Text(
+                        text = "2. MEDIA & BRANDING",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = CashColors.GoldPrimary,
+                        fontWeight = FontWeight.Bold
+                    )
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        if (logoUrl.isNotBlank()) {
+                            TaskLogoThumbnail(base64Url = logoUrl)
+                            OutlinedButton(
+                                onClick = {
+                                    SoundFx.playClick()
+                                    logoUrl = ""
+                                },
+                                modifier = Modifier.height(36.dp)
+                            ) {
+                                Text("Remove Logo", fontSize = 11.sp, color = colors.error)
                             }
                         } else {
-                            val savedTask = initialTask.copy(
-                                title = title.trim(),
-                                description = description.trim(),
-                                logoUrl = logoUrl,
-                                link = link.trim(),
-                                steps = validSteps,
-                                reward = rewardNum,
-                                perUserLimit = perUserNum.coerceAtLeast(1),
-                                totalLimit = totalLimitNum,
-                                deadline = parsedDeadlineMs,
-                                proofType = proofType,
-                                proofHint = proofHint.trim(),
-                                terms = terms.trim(),
-                                status = "draft"
-                            )
-                            onSave(savedTask)
+                            Surface(
+                                modifier = Modifier.size(54.dp),
+                                shape = CircleShape,
+                                color = colors.surfaceVariant
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        painter = painterResource(id = R.drawable.ic_document),
+                                        contentDescription = null,
+                                        tint = colors.textSecondary,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                }
+                            }
+
+                            Button(
+                                onClick = {
+                                    SoundFx.playClick()
+                                    imagePickerLauncher.launch("image/*")
+                                },
+                                modifier = Modifier.height(36.dp)
+                            ) {
+                                Icon(
+                                    painter = painterResource(id = R.drawable.ic_sparkle),
+                                    contentDescription = null,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Pick Logo (Gallery <=150KB)")
+                            }
                         }
-                    },
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = if (publishImmediately && !isReadyToPublish) colors.error else colors.primary
+                    }
+
+                    OutlinedTextField(
+                        value = bannerUrl,
+                        onValueChange = { bannerUrl = it },
+                        label = { Text("Header Banner URL (Optional)") },
+                        supportingText = { Text("Image link displayed at top of task details") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
                     )
+
+                    // SECTION 3: APP TRACKING & DESTINATION LINK
+                    Text(
+                        text = "3. APP TRACKING & DESTINATION LINK *",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = CashColors.GoldPrimary,
+                        fontWeight = FontWeight.Bold
+                    )
+
+                    OutlinedTextField(
+                        value = link,
+                        onValueChange = { link = it },
+                        label = { Text("Destination / Play Store Link (https:// required) *") },
+                        supportingText = {
+                            Text(
+                                text = if (!isLinkValid && (link.isNotBlank() || showValidationErrors))
+                                    "Must begin with https://" else "URL user opens to download or complete task",
+                                color = if (!isLinkValid && (link.isNotBlank() || showValidationErrors)) colors.error else colors.textSecondary
+                            )
+                        },
+                        isError = !isLinkValid && (link.isNotBlank() || showValidationErrors),
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+
+                    OutlinedTextField(
+                        value = packageName,
+                        onValueChange = { packageName = it },
+                        label = { Text("Tracked Package Name (e.g. com.example.app)") },
+                        supportingText = { Text("Required for user app UsageStatsManager real-time tracking") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+
+                    OutlinedTextField(
+                        value = requiredUsageMinutesStr,
+                        onValueChange = { requiredUsageMinutesStr = it.filter { c -> c.isDigit() } },
+                        label = { Text("Required App Usage Time (Minutes, Optional)") },
+                        supportingText = { Text("Duration user must keep the app active (e.g. 1, 2, 5 minutes)") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+
+                    // SECTION 4: INSTRUCTION STEPS
+                    Text(
+                        text = "4. TASK INSTRUCTION STEPS (MINIMUM 1 REQUIRED) *",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = CashColors.GoldPrimary,
+                        fontWeight = FontWeight.Bold
+                    )
+
+                    steps.forEachIndexed { index, stepText ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Surface(
+                                shape = CircleShape,
+                                color = colors.surfaceVariant,
+                                modifier = Modifier.size(26.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Text(
+                                        text = "${index + 1}",
+                                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                        color = colors.primary
+                                    )
+                                }
+                            }
+
+                            OutlinedTextField(
+                                value = stepText,
+                                onValueChange = { updated ->
+                                    if (updated.length <= 300) {
+                                        val copy = steps.toMutableList()
+                                        copy[index] = updated
+                                        steps = copy
+                                    }
+                                },
+                                label = { Text("Step ${index + 1} (${stepText.length}/300)") },
+                                modifier = Modifier.weight(1f),
+                                singleLine = true
+                            )
+
+                            if (index > 0) {
+                                IconButton(
+                                    onClick = {
+                                        val copy = steps.toMutableList()
+                                        val temp = copy[index]
+                                        copy[index] = copy[index - 1]
+                                        copy[index - 1] = temp
+                                        steps = copy
+                                    },
+                                    modifier = Modifier.size(28.dp)
+                                ) {
+                                    Icon(
+                                        painter = painterResource(id = R.drawable.ic_back),
+                                        contentDescription = "Move Up",
+                                        tint = colors.textSecondary,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                            }
+
+                            if (steps.size > 1) {
+                                IconButton(
+                                    onClick = {
+                                        val copy = steps.toMutableList()
+                                        copy.removeAt(index)
+                                        steps = copy
+                                    },
+                                    modifier = Modifier.size(28.dp)
+                                ) {
+                                    Icon(
+                                        painter = painterResource(id = R.drawable.ic_delete),
+                                        contentDescription = "Remove Step",
+                                        tint = colors.error,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    OutlinedButton(
+                        onClick = { steps = steps + "" },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("+ Add Another Step")
+                    }
+
+                    if (!isStepsValid && showValidationErrors) {
+                        Text(
+                            text = "At least one non-empty step instruction is required.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = colors.error
+                        )
+                    }
+
+                    // SECTION 5: REWARDS, LIMITS & DEADLINE
+                    Text(
+                        text = "5. REWARDS, LIMITS & DEADLINE *",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = CashColors.GoldPrimary,
+                        fontWeight = FontWeight.Bold
+                    )
+
+                    OutlinedTextField(
+                        value = rewardStr,
+                        onValueChange = { if (!hasCompletions) rewardStr = it.filter { c -> c.isDigit() } },
+                        label = { Text("Reward Coins *") },
+                        supportingText = {
+                            Text(
+                                text = if (hasCompletions) "Locked after first completion" else "Coins awarded upon task completion",
+                                color = if (hasCompletions) colors.warning else colors.textSecondary
+                            )
+                        },
+                        readOnly = hasCompletions,
+                        trailingIcon = if (hasCompletions) {
+                            { Icon(painterResource(id = R.drawable.ic_lock), contentDescription = null, tint = colors.warning) }
+                        } else null,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+
+                    OutlinedTextField(
+                        value = perUserLimitStr,
+                        onValueChange = { if (!hasCompletions) perUserLimitStr = it.filter { c -> c.isDigit() } },
+                        label = { Text("Per-User Completion Limit * (Default: 1)") },
+                        readOnly = hasCompletions,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+
+                    OutlinedTextField(
+                        value = totalLimitStr,
+                        onValueChange = { if (!hasCompletions) totalLimitStr = it.filter { c -> c.isDigit() } },
+                        label = { Text("Total Limit / Slots (Optional, Blank = Unlimited)") },
+                        readOnly = hasCompletions,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+
+                    OutlinedTextField(
+                        value = deadlineStr,
+                        onValueChange = { deadlineStr = it },
+                        label = { Text("Deadline IST (dd/MM/yyyy HH:mm, Optional)") },
+                        supportingText = {
+                            Text(
+                                text = if (!isDeadlineValid) "Deadline must be in the future to publish" else "Format: 31/12/2026 23:59 IST",
+                                color = if (!isDeadlineValid) colors.error else colors.textSecondary
+                            )
+                        },
+                        isError = !isDeadlineValid,
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+
+                    // SECTION 6: PROOF & SUBMISSION
+                    Text(
+                        text = "6. PROOF & SUBMISSION SETTINGS *",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = CashColors.GoldPrimary,
+                        fontWeight = FontWeight.Bold
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        listOf("Optional", "Screenshot", "Text", "Link").forEach { typeOption ->
+                            FilterChip(
+                                selected = proofType.equals(typeOption, ignoreCase = true),
+                                onClick = {
+                                    if (!hasCompletions) {
+                                        SoundFx.playClick()
+                                        proofType = typeOption
+                                    }
+                                },
+                                enabled = !hasCompletions,
+                                label = { Text(if (typeOption == "Optional") "Optional (No Proof)" else typeOption) }
+                            )
+                        }
+                    }
+                    if (proofType.equals("Optional", ignoreCase = true)) {
+                        Text(
+                            text = "Proof is optional. Users can complete task and submit without proof, and admin can approve or reject directly.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = colors.primary
+                        )
+                    }
+
+                    OutlinedTextField(
+                        value = proofHint,
+                        onValueChange = { if (it.length <= 200) proofHint = it },
+                        label = { Text("Proof Submission Hint (Optional)") },
+                        supportingText = { Text("${proofHint.length} / 200 chars · Guides user what proof to upload") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+
+                    // SECTION 7: TERMS & ADMIN NOTES
+                    Text(
+                        text = "7. TERMS & ADMIN INTERNAL NOTES",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = CashColors.GoldPrimary,
+                        fontWeight = FontWeight.Bold
+                    )
+
+                    OutlinedTextField(
+                        value = terms,
+                        onValueChange = { terms = it },
+                        label = { Text("Terms & Conditions / Rules (Optional)") },
+                        supportingText = { Text("Shown to users under T&C / Rules section") },
+                        modifier = Modifier.fillMaxWidth(),
+                        minLines = 2,
+                        maxLines = 4
+                    )
+
+                    OutlinedTextField(
+                        value = adminNote,
+                        onValueChange = { adminNote = it },
+                        label = { Text("Admin Internal Note / Verification Guidelines (Optional)") },
+                        supportingText = { Text("Visible only to admins when reviewing submissions") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+
+                    // SECTION 8: PUBLISH SETTINGS
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(Shapes.Chip)
+                            .background(colors.surfaceVariant)
+                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Publish Immediately",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = colors.textPrimary
+                            )
+                            Text(
+                                text = if (publishImmediately) "Task will be live to all users immediately upon save" else "Saved as draft (hidden from users)",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = colors.textSecondary
+                            )
+                        }
+
+                        Switch(
+                            checked = publishImmediately,
+                            onCheckedChange = {
+                                SoundFx.playClick()
+                                publishImmediately = it
+                            }
+                        )
+                    }
+                }
+
+                HorizontalDivider(color = colors.surfaceVariant)
+
+                // Bottom Sticky Action Bar
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    if (publishImmediately && !isReadyToPublish) {
-                        Text("Fix $invalidFieldCount fields to publish", color = Color.White)
-                    } else if (publishImmediately) {
-                        Text("Publish Task")
-                    } else {
-                        Text("Save")
+                    TextButton(
+                        onClick = {
+                            if (isDirty) showDiscardPrompt = true else onDismiss()
+                        }
+                    ) {
+                        Text("Cancel", color = colors.textSecondary)
+                    }
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(
+                            onClick = {
+                                if (isTitleValid || appName.isNotBlank()) {
+                                    val draftTask = initialTask.copy(
+                                        appName = appName.trim(),
+                                        title = if (title.isNotBlank()) title.trim() else appName.trim(),
+                                        description = description.trim(),
+                                        packageName = packageName.trim(),
+                                        requiredUsageMinutes = requiredUsageMinutesNum,
+                                        logoUrl = logoUrl,
+                                        bannerUrl = bannerUrl.trim(),
+                                        link = link.trim(),
+                                        steps = validSteps,
+                                        reward = rewardNum,
+                                        perUserLimit = perUserNum.coerceAtLeast(1),
+                                        totalLimit = totalLimitNum,
+                                        deadline = parsedDeadlineMs,
+                                        proofType = proofType,
+                                        proofHint = proofHint.trim(),
+                                        terms = terms.trim(),
+                                        adminNote = adminNote.trim(),
+                                        status = "draft"
+                                    )
+                                    onSave(draftTask)
+                                } else {
+                                    showValidationErrors = true
+                                }
+                            }
+                        ) {
+                            Text("Save Draft")
+                        }
+
+                        Button(
+                            onClick = {
+                                if (publishImmediately) {
+                                    if (isReadyToPublish) {
+                                        val publishedTask = initialTask.copy(
+                                            appName = appName.trim(),
+                                            title = title.trim(),
+                                            description = description.trim(),
+                                            packageName = packageName.trim(),
+                                            requiredUsageMinutes = requiredUsageMinutesNum,
+                                            logoUrl = logoUrl,
+                                            bannerUrl = bannerUrl.trim(),
+                                            link = link.trim(),
+                                            steps = validSteps,
+                                            reward = rewardNum,
+                                            perUserLimit = perUserNum.coerceAtLeast(1),
+                                            totalLimit = totalLimitNum,
+                                            deadline = parsedDeadlineMs,
+                                            proofType = proofType,
+                                            proofHint = proofHint.trim(),
+                                            terms = terms.trim(),
+                                            adminNote = adminNote.trim(),
+                                            status = "published"
+                                        )
+                                        onSave(publishedTask)
+                                    } else {
+                                        showValidationErrors = true
+                                    }
+                                } else {
+                                    val savedTask = initialTask.copy(
+                                        appName = appName.trim(),
+                                        title = if (title.isNotBlank()) title.trim() else appName.trim(),
+                                        description = description.trim(),
+                                        packageName = packageName.trim(),
+                                        requiredUsageMinutes = requiredUsageMinutesNum,
+                                        logoUrl = logoUrl,
+                                        bannerUrl = bannerUrl.trim(),
+                                        link = link.trim(),
+                                        steps = validSteps,
+                                        reward = rewardNum,
+                                        perUserLimit = perUserNum.coerceAtLeast(1),
+                                        totalLimit = totalLimitNum,
+                                        deadline = parsedDeadlineMs,
+                                        proofType = proofType,
+                                        proofHint = proofHint.trim(),
+                                        terms = terms.trim(),
+                                        adminNote = adminNote.trim(),
+                                        status = "draft"
+                                    )
+                                    onSave(savedTask)
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (publishImmediately && !isReadyToPublish) colors.error else colors.primary
+                            )
+                        ) {
+                            if (publishImmediately && !isReadyToPublish) {
+                                Text("Fix $invalidFieldCount fields", color = Color.White)
+                            } else if (publishImmediately) {
+                                Text("Publish Task")
+                            } else {
+                                Text("Save Task")
+                            }
+                        }
                     }
                 }
             }
-        },
-        dismissButton = {
-            TextButton(
-                onClick = {
-                    if (isDirty) {
-                        showDiscardPrompt = true
-                    } else {
-                        onDismiss()
-                    }
-                }
-            ) {
-                Text("Cancel", color = colors.textSecondary)
-            }
-        },
-        containerColor = colors.surface,
-        shape = Shapes.Dialog
-    )
+        }
+    }
 
     // Unsaved Changes Discard Prompt
     if (showDiscardPrompt) {
@@ -1202,7 +1356,12 @@ fun TaskDetailSheet(
                 )
 
                 Text(
-                    text = "Proof Type: ${task.proofType}\n" +
+                    text = "App Name: ${task.appName.ifBlank { "Not specified" }}\n" +
+                            "Tracked Package: ${task.packageName.ifBlank { "None (No usage tracking)" }}\n" +
+                            "Usage Duration: ${if (task.requiredUsageMinutes > 0L) "${task.requiredUsageMinutes} minutes" else "None"}\n" +
+                            "Header Banner: ${task.bannerUrl.ifBlank { "None" }}\n" +
+                            "Admin Note: ${task.adminNote.ifBlank { "None" }}\n" +
+                            "Proof Type: ${task.proofType}\n" +
                             "Proof Hint: ${task.proofHint.ifBlank { "None provided" }}\n" +
                             "Target Link: ${task.link}\n" +
                             "Per-User Limit: ${task.perUserLimit}\n" +
@@ -1281,18 +1440,37 @@ fun TaskUserAppPreviewSheet(
                         }
 
                         Column(modifier = Modifier.weight(1f)) {
+                            if (task.appName.isNotBlank()) {
+                                Text(
+                                    text = task.appName.uppercase(),
+                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, fontWeight = FontWeight.Bold),
+                                    color = CashColors.GoldPrimary
+                                )
+                            }
                             Text(
                                 text = task.title,
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = colors.textPrimary
                             )
-                            Text(
-                                text = "+${task.reward} Coins",
-                                style = MaterialTheme.typography.bodySmall,
-                                fontWeight = FontWeight.Bold,
-                                color = CashColors.GoldPrimary
-                            )
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Text(
+                                    text = "+${task.reward} Coins",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = CashColors.GoldPrimary
+                                )
+                                if (task.requiredUsageMinutes > 0L) {
+                                    Text(
+                                        text = "· ${task.requiredUsageMinutes} min app usage",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = colors.textSecondary
+                                    )
+                                }
+                            }
                         }
                     }
 
