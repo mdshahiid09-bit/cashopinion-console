@@ -147,7 +147,7 @@ fun StatusBadge(
     val colors = CashTheme.colors
     val s = status.lowercase()
 
-    val (bgColor, textColor, borderCol) = when {
+    val (bgColor: Color, textColor: Color, borderCol: Color) = when {
         s in listOf("paid", "approved", "completed", "published", "active") ->
             Triple(colors.success.copy(alpha = 0.15f), colors.success, colors.success)
         s in listOf("pending", "draft", "in_progress", "warning", "open") ->

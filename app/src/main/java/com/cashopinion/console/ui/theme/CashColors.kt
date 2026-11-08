@@ -56,3 +56,11 @@ object ThemePalettes {
         isDark = false
     )
 }
+
+object CashColors {
+    val GoldPrimary = Color(0xFFFFB800)
+    val AmberSecondary = Color(0xFFFF9500)
+    val GoldSecondary = Color(0xFFFF9500)
+    val Dark = ThemePalettes.Dark
+    val Light = ThemePalettes.Light
+}
