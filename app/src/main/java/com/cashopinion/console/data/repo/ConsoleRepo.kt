@@ -151,109 +151,425 @@ class ConsoleRepo(
         awaitClose { withdrawalsRef.removeEventListener(withdrawListener) }
     }
 
-    // 3. Observe Withdrawals List
-    fun observeWithdrawals(): Flow<List<WithdrawalItem>> = callbackFlow {
-        val ref = database.getReference(Constants.NODE_WITHDRAWALS)
-        val listener = object : ValueEventListener {
-            override fun onDataChange(snapshot: DataSnapshot) {
-                val list = mutableListOf<WithdrawalItem>()
-                for (child in snapshot.children) {
-                    val id = child.key.orEmpty()
-                    val uid = child.child("uid").value?.toString().orEmpty()
-                    val method = child.child("method").value?.toString() ?: "upi"
-                    val coins = child.child("coins").value?.toString()?.toLongOrNull() ?: 0L
-                    val inr = child.child("inrAmount").value?.toString()?.toDoubleOrNull() ?: (coins / 1000.0)
-                    val status = child.child("status").value?.toString() ?: "pending"
-                    val utr = child.child("utr").value?.toString().orEmpty()
-                    val paymentDetails = child.child("paymentDetails").value?.toString()
-                        ?: child.child("upiId").value?.toString().orEmpty()
-                    val requestedAt = child.child("requestedAt").value?.toString()?.toLongOrNull() ?: 0L
-                    val processedAt = child.child("processedAt").value?.toString()?.toLongOrNull() ?: 0L
-                    val processedBy = child.child("processedBy").value?.toString().orEmpty()
-                    val rejectionReason = child.child("rejectionReason").value?.toString().orEmpty()
-                    val reversalReason = child.child("reversalReason").value?.toString().orEmpty()
-
-                    list.add(
-                        WithdrawalItem(
-                            id = id,
-                            uid = uid,
-                            method = method,
-                            coins = coins,
-                            inrAmount = inr,
-                            status = status,
-                            utr = utr,
-                            paymentDetails = paymentDetails,
-                            requestedAt = requestedAt,
-                            processedAt = processedAt,
-                            processedBy = processedBy,
-                            rejectionReason = rejectionReason,
-                            reversalReason = reversalReason
-                        )
-                    )
-                }
-                list.sortByDescending { it.requestedAt }
-                trySend(list)
-            }
-
-            override fun onCancelled(error: DatabaseError) {
-                trySend(emptyList())
-            }
+    private fun maskUpi(raw: String): String {
+        val clean = raw.trim()
+        if (clean.isBlank()) return "Not provided"
+        if (!clean.contains("@")) {
+            return if (clean.length > 4) clean.take(2) + "****" + clean.takeLast(2) else "****"
         }
-
-        ref.addValueEventListener(listener)
-        awaitClose { ref.removeEventListener(listener) }
+        val parts = clean.split("@", limit = 2)
+        val handle = parts[0]
+        val domain = parts[1]
+        val maskedHandle = if (handle.length >= 2) {
+            handle.take(2) + "****"
+        } else {
+            handle + "****"
+        }
+        return "$maskedHandle@$domain"
     }
 
-    // 4. Observe Users List
+    private fun maskBank(accountNo: String, bankName: String = ""): String {
+        val clean = accountNo.trim()
+        if (clean.isBlank()) return "Not provided"
+        val last4 = if (clean.length >= 4) clean.takeLast(4) else clean
+        val prefix = "XXXX$last4"
+        return if (bankName.isNotBlank()) "$prefix ($bankName)" else prefix
+    }
+
+    // 3. Observe Withdrawals List (Live Joined with Users & PaymentMethods)
+    fun observeWithdrawals(): Flow<List<WithdrawalItem>> = callbackFlow {
+        val ref = database.getReference(Constants.NODE_WITHDRAWALS)
+        val usersRef = database.getReference(Constants.NODE_USERS)
+        val pmRef = database.getReference(Constants.NODE_PAYMENT_METHODS)
+
+        var lastWithdrawalsSnap: DataSnapshot? = null
+        var lastUsersSnap: DataSnapshot? = null
+        var lastPmSnap: DataSnapshot? = null
+
+        fun emitJoined() {
+            val wSnap = lastWithdrawalsSnap ?: return
+            val uSnap = lastUsersSnap
+            val pSnap = lastPmSnap
+
+            val list = mutableListOf<WithdrawalItem>()
+            for (child in wSnap.children) {
+                val id = child.key.orEmpty()
+                val uid = child.child("uid").value?.toString().orEmpty()
+
+                val userChild = uSnap?.child(uid)
+                val profileSnap = userChild?.child("profile")
+
+                val directName = child.child("name").value?.toString()
+                val joinedName = profileSnap?.child("name").value?.toString()
+                    ?: userChild?.child("name").value?.toString()
+                    ?: userChild?.child("displayName").value?.toString()
+                val userName = directName?.takeIf { it.isNotBlank() } ?: joinedName ?: ""
+
+                val directEmail = child.child("email").value?.toString()
+                val joinedEmail = profileSnap?.child("email").value?.toString()
+                    ?: userChild?.child("email").value?.toString()
+                val userEmail = directEmail?.takeIf { it.isNotBlank() } ?: joinedEmail ?: ""
+
+                val method = child.child("method").value?.toString() ?: "upi"
+                val coins = child.child("amountCoins").value?.toString()?.toLongOrNull()
+                    ?: child.child("coins").value?.toString()?.toLongOrNull() ?: 0L
+                val inr = child.child("amountCurrency").value?.toString()?.toDoubleOrNull()
+                    ?: child.child("inrAmount").value?.toString()?.toDoubleOrNull() ?: (coins / 1000.0)
+                val status = child.child("status").value?.toString() ?: "pending"
+                val utr = child.child("utr").value?.toString().orEmpty()
+                val requestedAt = child.child("createdAt").value?.toString()?.toLongOrNull()
+                    ?: child.child("requestedAt").value?.toString()?.toLongOrNull() ?: 0L
+                val processedAt = child.child("processedAt").value?.toString()?.toLongOrNull() ?: 0L
+                val processedBy = child.child("processedBy").value?.toString().orEmpty()
+                val rejectionReason = child.child("rejectionReason").value?.toString()
+                    ?: child.child("adminNote").value?.toString().orEmpty()
+                val reversalReason = child.child("reversalReason").value?.toString().orEmpty()
+
+                val ms = child.child("methodSnapshot")
+                var unmaskedPayout = ""
+                var maskedPayout = ""
+                var accountHolderName = ""
+                var ifsc = ""
+                var bankName = ""
+                var phone = ""
+                var payoutSource = "Not provided"
+
+                if (ms.exists() && ms.childrenCount > 0) {
+                    payoutSource = "Snapshot at request"
+                    val msType = ms.child("type").value?.toString() ?: method
+                    if (msType.equals("bank", ignoreCase = true)) {
+                        val acc = ms.child("accountNumber").value?.toString().orEmpty()
+                        accountHolderName = ms.child("fullName").value?.toString().orEmpty()
+                        ifsc = ms.child("ifsc").value?.toString().orEmpty()
+                        bankName = ms.child("bankName").value?.toString().orEmpty()
+                        phone = ms.child("phone").value?.toString().orEmpty()
+                        unmaskedPayout = acc
+                        maskedPayout = maskBank(acc, bankName)
+                    } else if (msType.equals("redeem", ignoreCase = true)) {
+                        val emailVal = ms.child("email").value?.toString().orEmpty()
+                        unmaskedPayout = emailVal
+                        maskedPayout = emailVal
+                    } else {
+                        val upiVal = ms.child("id").value?.toString()
+                            ?: ms.child("upiId").value?.toString().orEmpty()
+                        unmaskedPayout = upiVal
+                        maskedPayout = maskUpi(upiVal)
+                    }
+                } else if (pSnap != null && uid.isNotBlank()) {
+                    val userPm = pSnap.child(uid)
+                    if (userPm.exists()) {
+                        val mKey = method.lowercase()
+                        if (mKey == "bank" && userPm.child("bank").exists()) {
+                            payoutSource = "Current saved method"
+                            val bSnap = userPm.child("bank")
+                            val acc = bSnap.child("accountNumber").value?.toString().orEmpty()
+                            accountHolderName = bSnap.child("fullName").value?.toString().orEmpty()
+                            ifsc = bSnap.child("ifsc").value?.toString().orEmpty()
+                            bankName = bSnap.child("bankName").value?.toString().orEmpty()
+                            phone = bSnap.child("phone").value?.toString().orEmpty()
+                            unmaskedPayout = acc
+                            maskedPayout = maskBank(acc, bankName)
+                        } else if (userPm.child("upi").exists()) {
+                            payoutSource = "Current saved method"
+                            val uSnapItem = userPm.child("upi")
+                            val upiVal = uSnapItem.child("id").value?.toString()
+                                ?: uSnapItem.child("upiId").value?.toString().orEmpty()
+                            unmaskedPayout = upiVal
+                            maskedPayout = maskUpi(upiVal)
+                        } else if (userPm.child("bank").exists()) {
+                            payoutSource = "Current saved method"
+                            val bSnap = userPm.child("bank")
+                            val acc = bSnap.child("accountNumber").value?.toString().orEmpty()
+                            accountHolderName = bSnap.child("fullName").value?.toString().orEmpty()
+                            ifsc = bSnap.child("ifsc").value?.toString().orEmpty()
+                            bankName = bSnap.child("bankName").value?.toString().orEmpty()
+                            phone = bSnap.child("phone").value?.toString().orEmpty()
+                            unmaskedPayout = acc
+                            maskedPayout = maskBank(acc, bankName)
+                        }
+                    }
+                }
+
+                if (unmaskedPayout.isBlank()) {
+                    val legUpi = child.child("paymentDetails").value?.toString()
+                        ?: child.child("upiId").value?.toString().orEmpty()
+                    if (legUpi.isNotBlank()) {
+                        unmaskedPayout = legUpi
+                        maskedPayout = if (method.equals("bank", ignoreCase = true)) maskBank(legUpi) else maskUpi(legUpi)
+                        payoutSource = "Snapshot at request"
+                    }
+                }
+
+                val isMissing = unmaskedPayout.isBlank() || maskedPayout.isBlank()
+                if (isMissing) {
+                    maskedPayout = "Not provided"
+                    unmaskedPayout = "Not provided"
+                    payoutSource = "Not provided"
+                }
+
+                list.add(
+                    WithdrawalItem(
+                        id = id,
+                        uid = uid,
+                        userName = userName,
+                        userEmail = userEmail,
+                        method = method,
+                        coins = coins,
+                        inrAmount = inr,
+                        status = status,
+                        utr = utr,
+                        paymentDetails = maskedPayout,
+                        maskedPayout = maskedPayout,
+                        unmaskedPayout = unmaskedPayout,
+                        accountHolderName = accountHolderName,
+                        ifsc = ifsc,
+                        bankName = bankName,
+                        phone = phone,
+                        payoutSource = payoutSource,
+                        isMissingPayout = isMissing,
+                        requestedAt = requestedAt,
+                        processedAt = processedAt,
+                        processedBy = processedBy,
+                        rejectionReason = rejectionReason,
+                        reversalReason = reversalReason
+                    )
+                )
+            }
+            list.sortByDescending { it.requestedAt }
+            trySend(list)
+        }
+
+        val wListener = object : ValueEventListener {
+            override fun onDataChange(s: DataSnapshot) {
+                lastWithdrawalsSnap = s
+                emitJoined()
+            }
+            override fun onCancelled(e: DatabaseError) { trySend(emptyList()) }
+        }
+
+        val uListener = object : ValueEventListener {
+            override fun onDataChange(s: DataSnapshot) {
+                lastUsersSnap = s
+                emitJoined()
+            }
+            override fun onCancelled(e: DatabaseError) {}
+        }
+
+        val pmListener = object : ValueEventListener {
+            override fun onDataChange(s: DataSnapshot) {
+                lastPmSnap = s
+                emitJoined()
+            }
+            override fun onCancelled(e: DatabaseError) {}
+        }
+
+        ref.addValueEventListener(wListener)
+        usersRef.addValueEventListener(uListener)
+        pmRef.addValueEventListener(pmListener)
+
+        awaitClose {
+            ref.removeEventListener(wListener)
+            usersRef.removeEventListener(uListener)
+            pmRef.removeEventListener(pmListener)
+        }
+    }
+
+    // 4. Observe Users List (Live Joined with Wallets and Profiles)
     fun observeUsers(): Flow<List<UserItem>> = callbackFlow {
         val usersRef = database.getReference(Constants.NODE_USERS)
         val walletsRef = database.getReference(Constants.NODE_WALLETS)
 
-        val listener = object : ValueEventListener {
-            override fun onDataChange(snapshot: DataSnapshot) {
-                walletsRef.get().addOnSuccessListener { walletsSnap ->
-                    val list = mutableListOf<UserItem>()
-                    for (child in snapshot.children) {
-                        val uid = child.key.orEmpty()
-                        val wSnap = walletsSnap.child(uid)
-                        val coins = wSnap.child("coins").value?.toString()?.toLongOrNull() ?: 0L
-                        val withdrawn = wSnap.child("totalWithdrawn").value?.toString()?.toLongOrNull() ?: 0L
-                        val pendingWId = wSnap.child("pendingWithdrawalId").value?.toString()
+        var lastUsersSnap: DataSnapshot? = null
+        var lastWalletsSnap: DataSnapshot? = null
 
-                        val isBanned = child.child("isBanned").value == true ||
-                                child.child("status").value?.toString() == "banned"
+        fun emitJoined() {
+            val uSnap = lastUsersSnap ?: return
+            val wSnap = lastWalletsSnap
 
-                        list.add(
-                            UserItem(
-                                uid = uid,
-                                name = child.child("name").value?.toString() ?: "User",
-                                email = child.child("email").value?.toString().orEmpty(),
-                                coins = coins,
-                                totalWithdrawn = withdrawn,
-                                pendingWithdrawalId = pendingWId,
-                                isBanned = isBanned,
-                                status = if (isBanned) "banned" else "active",
-                                banReason = child.child("banReason").value?.toString(),
-                                referralCode = child.child("referralCode").value?.toString().orEmpty(),
-                                referredBy = child.child("referredBy").value?.toString().orEmpty(),
-                                deviceHash = child.child("deviceId").value?.toString().orEmpty(),
-                                ipAddress = child.child("ipAddress").value?.toString().orEmpty(),
-                                createdAt = child.child("createdAt").value?.toString()?.toLongOrNull() ?: 0L
-                            )
-                        )
-                    }
-                    list.sortByDescending { it.createdAt }
-                    trySend(list)
+            val list = mutableListOf<UserItem>()
+            for (child in uSnap.children) {
+                val uid = child.key.orEmpty()
+                val wItem = wSnap?.child(uid)
+                val coins = wItem?.child("coins").value?.toString()?.toLongOrNull() ?: 0L
+                val withdrawn = wItem?.child("totalWithdrawn").value?.toString()?.toLongOrNull() ?: 0L
+                val pendingWId = wItem?.child("pendingWithdrawalId").value?.toString()
+
+                val profileSnap = child.child("profile")
+                val name = profileSnap.child("name").value?.toString()
+                    ?: child.child("name").value?.toString()
+                    ?: child.child("displayName").value?.toString().orEmpty()
+
+                val email = profileSnap.child("email").value?.toString()
+                    ?: child.child("email").value?.toString().orEmpty()
+
+                val phone = profileSnap.child("phone").value?.toString()
+                    ?: child.child("phone").value?.toString().orEmpty()
+
+                val avatarUrl = profileSnap.child("avatarUrl").value?.toString().orEmpty()
+
+                val referralCode = profileSnap.child("referralCode").value?.toString()
+                    ?: child.child("referralCode").value?.toString().orEmpty()
+
+                val referredBy = profileSnap.child("referredBy").value?.toString()
+                    ?: child.child("referredBy").value?.toString().orEmpty()
+
+                val deviceHash = profileSnap.child("deviceHash").value?.toString()
+                    ?: child.child("deviceId").value?.toString()
+                    ?: child.child("deviceHash").value?.toString().orEmpty()
+
+                val ipAddress = profileSnap.child("ipAddress").value?.toString()
+                    ?: child.child("ipAddress").value?.toString().orEmpty()
+
+                val country = profileSnap.child("country").value?.toString()
+                    ?: child.child("country").value?.toString().orEmpty()
+
+                val lastLogin = profileSnap.child("lastLogin").value?.toString()?.toLongOrNull()
+                    ?: child.child("lastLogin").value?.toString()?.toLongOrNull() ?: 0L
+
+                val createdAt = profileSnap.child("createdAt").value?.toString()?.toLongOrNull()
+                    ?: child.child("createdAt").value?.toString()?.toLongOrNull() ?: 0L
+
+                val statusSnap = child.child("status")
+                val isBanned = (statusSnap.child("banned").value == true) ||
+                        (child.child("isBanned").value == true) ||
+                        (child.child("status").value?.toString() == "banned")
+
+                val banReason = statusSnap.child("banReason").value?.toString()
+                    ?: child.child("banReason").value?.toString()
+
+                val flagsList = mutableListOf<String>()
+                if (child.child("flags").child("signupBonusGiven").value == true) {
+                    flagsList.add("signup_bonus")
                 }
-            }
 
-            override fun onCancelled(error: DatabaseError) {
-                trySend(emptyList())
+                list.add(
+                    UserItem(
+                        uid = uid,
+                        name = name,
+                        email = email,
+                        phone = phone,
+                        avatarUrl = avatarUrl,
+                        coins = coins,
+                        totalWithdrawn = withdrawn,
+                        pendingWithdrawalId = pendingWId,
+                        isBanned = isBanned,
+                        status = if (isBanned) "banned" else "active",
+                        banReason = banReason,
+                        flags = flagsList,
+                        referralCode = referralCode,
+                        referredBy = referredBy,
+                        deviceHash = deviceHash,
+                        ipAddress = ipAddress,
+                        country = country,
+                        lastLogin = lastLogin,
+                        createdAt = createdAt
+                    )
+                )
+            }
+            list.sortByDescending { it.createdAt }
+            trySend(list)
+        }
+
+        val uListener = object : ValueEventListener {
+            override fun onDataChange(s: DataSnapshot) {
+                lastUsersSnap = s
+                emitJoined()
+            }
+            override fun onCancelled(e: DatabaseError) { trySend(emptyList()) }
+        }
+
+        val wListener = object : ValueEventListener {
+            override fun onDataChange(s: DataSnapshot) {
+                lastWalletsSnap = s
+                emitJoined()
+            }
+            override fun onCancelled(e: DatabaseError) {}
+        }
+
+        usersRef.addValueEventListener(uListener)
+        walletsRef.addValueEventListener(wListener)
+
+        awaitClose {
+            usersRef.removeEventListener(uListener)
+            walletsRef.removeEventListener(wListener)
+        }
+    }
+
+    suspend fun revealWithdrawalPayout(withdrawalId: String, targetUid: String, reason: String): Result<String> {
+        if (reason.trim().length < 5) {
+            return Result.failure(IllegalArgumentException("Reason must be at least 5 characters"))
+        }
+
+        val sRes = serverClient.revealWithdrawalPayout(withdrawalId, reason)
+        if (sRes.isSuccess) {
+            val data = sRes.getOrNull()
+            val pDetails = data?.optJSONObject("payoutDetails")
+            if (pDetails != null) {
+                val type = pDetails.optString("type")
+                val unmasked = if (type.equals("bank", true)) {
+                    val acc = pDetails.optString("accountNumber")
+                    val bank = pDetails.optString("bankName")
+                    val ifsc = pDetails.optString("ifsc")
+                    val name = pDetails.optString("fullName")
+                    "Account: $acc | IFSC: $ifsc | Bank: $bank | Holder: $name"
+                } else {
+                    pDetails.optString("id").ifBlank { pDetails.optString("upiId") }
+                }
+                if (unmasked.isNotBlank()) return Result.success(unmasked)
             }
         }
 
-        usersRef.addValueEventListener(listener)
-        awaitClose { usersRef.removeEventListener(listener) }
+        // Resilient fallback directly from RTDB with immutable audit log
+        return try {
+            val wSnap = database.getReference(Constants.NODE_WITHDRAWALS).child(withdrawalId).get().await()
+            var unmasked = ""
+            val ms = wSnap.child("methodSnapshot")
+            if (ms.exists() && ms.childrenCount > 0) {
+                val type = ms.child("type").value?.toString().orEmpty()
+                unmasked = if (type.equals("bank", true)) {
+                    val acc = ms.child("accountNumber").value?.toString().orEmpty()
+                    val ifsc = ms.child("ifsc").value?.toString().orEmpty()
+                    val bank = ms.child("bankName").value?.toString().orEmpty()
+                    val name = ms.child("fullName").value?.toString().orEmpty()
+                    "Account: $acc | IFSC: $ifsc | Bank: $bank | Holder: $name"
+                } else {
+                    ms.child("id").value?.toString() ?: ms.child("upiId").value?.toString().orEmpty()
+                }
+            }
+            if (unmasked.isBlank() && targetUid.isNotBlank()) {
+                val pmSnap = database.getReference(Constants.NODE_PAYMENT_METHODS).child(targetUid).get().await()
+                val upi = pmSnap.child("upi").child("id").value?.toString()
+                val bankAcc = pmSnap.child("bank").child("accountNumber").value?.toString()
+                if (!upi.isNullOrBlank()) {
+                    unmasked = upi
+                } else if (!bankAcc.isNullOrBlank()) {
+                    val ifsc = pmSnap.child("bank").child("ifsc").value?.toString().orEmpty()
+                    val bank = pmSnap.child("bank").child("bankName").value?.toString().orEmpty()
+                    val name = pmSnap.child("bank").child("fullName").value?.toString().orEmpty()
+                    "Account: $bankAcc | IFSC: $ifsc | Bank: $bank | Holder: $name"
+                }
+            }
+
+            if (unmasked.isNotBlank()) {
+                val now = System.currentTimeMillis()
+                val adminUid = auth.currentUser?.uid.orEmpty()
+                database.getReference("adminAudit").push().setValue(
+                    mapOf(
+                        "action" to "withdrawal_payout_revealed",
+                        "withdrawalId" to withdrawalId,
+                        "targetUid" to targetUid,
+                        "reason" to reason.trim(),
+                        "adminUid" to adminUid,
+                        "timestamp" to now
+                    )
+                ).await()
+                Result.success(unmasked)
+            } else {
+                Result.failure(Exception("Payout details not available"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
     }
 
     // 5. Observe Tasks List

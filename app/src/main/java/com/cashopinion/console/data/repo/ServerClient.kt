@@ -165,6 +165,11 @@ class ServerClient(
         return post("/v1/payout-methods/$uid/$methodId/reveal", body)
     }
 
+    suspend fun revealWithdrawalPayout(withdrawalId: String, reason: String): Result<JSONObject> {
+        val body = JSONObject().put("reason", reason)
+        return post("/v1/withdrawals/$withdrawalId/reveal-payout", body)
+    }
+
     suspend fun disablePayoutMethod(uid: String, methodId: String, reason: String): Result<JSONObject> {
         val body = JSONObject().put("reason", reason)
         return post("/v1/payout-methods/$uid/$methodId/disable", body)

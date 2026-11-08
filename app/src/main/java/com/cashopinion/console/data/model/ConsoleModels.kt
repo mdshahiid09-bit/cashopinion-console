@@ -18,6 +18,8 @@ data class UserItem(
     val uid: String = "",
     val name: String = "",
     val email: String = "",
+    val phone: String = "",
+    val avatarUrl: String = "",
     val coins: Long = 0L,
     val totalWithdrawn: Long = 0L,
     val pendingWithdrawalId: String? = null,
@@ -29,6 +31,8 @@ data class UserItem(
     val referredBy: String = "",
     val deviceHash: String = "",
     val ipAddress: String = "",
+    val country: String = "",
+    val lastLogin: Long = 0L,
     val createdAt: Long = 0L
 )
 
@@ -36,12 +40,22 @@ data class UserItem(
 data class WithdrawalItem(
     val id: String = "",
     val uid: String = "",
+    val userName: String = "",
+    val userEmail: String = "",
     val method: String = "upi",
     val coins: Long = 0L,
     val inrAmount: Double = 0.0,
     val status: String = "pending", // pending | paid | rejected | reversed
     val utr: String = "",
     val paymentDetails: String = "",
+    val maskedPayout: String = "",
+    val unmaskedPayout: String = "",
+    val accountHolderName: String = "",
+    val ifsc: String = "",
+    val bankName: String = "",
+    val phone: String = "",
+    val payoutSource: String = "Snapshot at request", // Snapshot at request | Current saved method | Not provided
+    val isMissingPayout: Boolean = false,
     val requestedAt: Long = 0L,
     val processedAt: Long = 0L,
     val processedBy: String = "",

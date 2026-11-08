@@ -671,6 +671,72 @@ app.post('/v1/payout-methods/:uid/:methodId/reveal', requireAdmin, checkIdempote
   }
 });
 
+// Withdrawals: Reveal Payout Method with Audit
+app.post('/v1/withdrawals/:id/reveal-payout', requireAdmin, checkIdempotency, async (req, res) => {
+  const { id } = req.params;
+  const { reason } = req.body;
+
+  if (!reason || reason.trim().length < 5) {
+    return res.status(400).json({ success: false, error: "Valid justification reason (minimum 5 characters) is required for audit compliance." });
+  }
+
+  try {
+    const wSnap = await db.ref(`withdrawals/${id}`).get();
+    if (!wSnap.exists()) {
+      return res.status(404).json({ success: false, error: "Withdrawal record not found" });
+    }
+
+    const wData = wSnap.val();
+    const uid = wData.uid;
+
+    let payoutDetails = null;
+    let source = "Not provided";
+
+    if (wData.methodSnapshot && typeof wData.methodSnapshot === 'object' && Object.keys(wData.methodSnapshot).length > 0) {
+      payoutDetails = wData.methodSnapshot;
+      source = "Snapshot at request";
+    } else if (uid) {
+      const mSnap = await db.ref(`paymentMethods/${uid}`).get();
+      if (mSnap.exists()) {
+        const methods = mSnap.val();
+        const mKey = (wData.method || "upi").toLowerCase();
+        if (methods[mKey]) {
+          payoutDetails = methods[mKey];
+          source = "Current saved method";
+        } else if (methods.upi) {
+          payoutDetails = methods.upi;
+          source = "Current saved method";
+        } else if (methods.bank) {
+          payoutDetails = methods.bank;
+          source = "Current saved method";
+        }
+      }
+    }
+
+    // Record Immutable Audit Trail
+    await db.ref('adminAudit').push({
+      action: "withdrawal_payout_revealed",
+      withdrawalId: id,
+      targetUid: uid,
+      reason: reason.trim(),
+      adminUid: req.adminUid,
+      timestamp: Date.now()
+    });
+
+    const responseBody = {
+      success: true,
+      withdrawalId: id,
+      uid,
+      source,
+      payoutDetails
+    };
+    if (req.requestId) await saveIdempotency(req.requestId, 200, responseBody);
+    return res.json(responseBody);
+  } catch (e) {
+    return res.status(500).json({ success: false, error: e.message });
+  }
+});
+
 // Payout Methods: Disable with Reason
 app.post('/v1/payout-methods/:uid/:methodId/disable', requireAdmin, checkIdempotency, async (req, res) => {
   const { uid, methodId } = req.params;
