@@ -19,6 +19,14 @@ object CashTheme {
 }
 
 @Composable
+fun CashTheme(
+    darkTheme: Boolean = true,
+    content: @Composable () -> Unit
+) {
+    CashConsoleTheme(darkTheme = darkTheme, content = content)
+}
+
+@Composable
 fun CashConsoleTheme(
     darkTheme: Boolean = true,
     content: @Composable () -> Unit

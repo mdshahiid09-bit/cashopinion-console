@@ -21,6 +21,7 @@ import com.cashopinion.console.ui.screens.season.SeasonScreen
 import com.cashopinion.console.ui.screens.settings.SettingsScreen
 import com.cashopinion.console.ui.screens.tasks.TasksScreen
 import com.cashopinion.console.ui.screens.users.UsersScreen
+import com.cashopinion.console.ui.screens.withdrawals.WithdrawalsScreen
 import com.cashopinion.console.ui.theme.CashTheme
 import kotlinx.coroutines.launch
 
@@ -268,7 +269,7 @@ fun MainAppScreen(
                                         consoleRepo = container.consoleRepo,
                                         onNavigateToWithdrawals = { selectedTab = ConsoleTab.Withdrawals },
                                         onNavigateToReviews = { activeSubScreen = SubScreen.Reviews },
-                                        onNavigateToTickets = { activeSubScreen = SubScreen.More }
+                                        onNavigateToTickets = { selectedTab = ConsoleTab.More }
                                     )
                                     ConsoleTab.Users -> UsersScreen(consoleRepo = container.consoleRepo)
                                     ConsoleTab.Withdrawals -> WithdrawalsScreen(consoleRepo = container.consoleRepo)
